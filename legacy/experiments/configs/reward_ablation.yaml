@@ -1,0 +1,22 @@
+# Reward ablation (Axis 3 support). Fixed base environment; sweep reward type
+# and the individual dense lambdas to isolate each term's contribution.
+
+experiment_name: reward_ablation
+base_config: base.yaml
+
+sweep:
+  axes:
+    - param: reward.type
+      values: [sparse, dense, hybrid]
+    - param: reward.dense.lambda_progress
+      values: [0.0, 1.0]
+    - param: reward.dense.lambda_speed
+      values: [0.0, 0.3]
+    - param: reward.dense.lambda_crash
+      values: [0.0, 5.0]
+    - param: reward.dense.lambda_competitive
+      values: [0.0, 0.5]
+  base_config: base.yaml
+  # Each reward variant is trained independently on the fixed base environment.
+  train_on: per_variant
+  eval_on: base

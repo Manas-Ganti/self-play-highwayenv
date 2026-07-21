@@ -1,0 +1,23 @@
+# Dense solo reward weights. Identical for PPO and GRPO -- an asymmetric reward
+# would invalidate every comparison downstream.
+#
+# STATUS: provisional until the Phase 1 gate (SB3 PPO reliably completes laps).
+# FROZEN at gate pass. Any change after that is a protocol amendment and must be
+# recorded in report/log.md (CLAUDE.md §8).
+
+# Lap progress, normalised by the distance covered in one step at target speed,
+# so a lap-record pace earns ~1.0/step regardless of track length or step rate.
+lambda_progress: 1.0
+
+# Speed shaping, in [0, lambda_speed]. Deliberately small: progress already
+# rewards speed, and this term exists only to break the "stand still, never
+# crash" local optimum early in training.
+lambda_speed: 0.1
+target_speed: 10.0          # m/s; matches the racetrack speed limit
+
+# Terminal penalties.
+collision_penalty: 5.0      # ~= 5 s of perfect driving; crashing must not pay
+offtrack_penalty: 0.5       # leaving the track ends the episode (forfeits future reward)
+
+action_cost: 0.0            # control-effort cost; off by default
+lap_bonus: 0.0              # progress term already integrates to this; off by default

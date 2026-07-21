@@ -1,0 +1,17 @@
+# Physics transfer (Axis 1). Train once at the training condition, evaluate on
+# every combination of drag x mass_scale without retraining.
+
+experiment_name: physics_sweep
+base_config: base.yaml
+
+sweep:
+  axes:
+    - param: env.vehicle_drag
+      values: [0.2, 0.4, 0.6, 0.8]
+    - param: env.vehicle_mass_scale
+      values: [0.5, 1.0, 1.5, 2.0]
+  base_config: base.yaml
+  train_on:
+    vehicle_drag: 0.4
+    vehicle_mass_scale: 1.0
+  eval_on: all_combinations

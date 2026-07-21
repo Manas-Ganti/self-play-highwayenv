@@ -1,0 +1,33 @@
+# Core RL stack
+torch>=2.2                     # install the cu121 wheel on the A100 node; see README
+gymnasium>=1.0                 # vector envs with an explicit AutoresetMode
+highway-env>=1.11
+pettingzoo>=1.24               # Parallel API; head-to-head evaluation only
+stable-baselines3>=2.3         # Phase 1 env validation + Phase 2 PPO parity ONLY
+
+# Config / data
+pydantic>=2.6
+pyyaml>=6.0
+numpy>=1.26
+pandas>=2.2
+
+# Analysis
+matplotlib>=3.8
+seaborn>=0.13
+rliable>=1.2                   # IQM + stratified bootstrap CIs (CLAUDE.md §7)
+tabulate>=0.9                  # pandas.to_markdown backend
+
+# Logging: W&B preferred, TensorBoard is the graceful fallback (CLAUDE.md §2)
+wandb>=0.16
+tensorboard>=2.16
+
+# Video export for the Phase 5 ramming review
+imageio>=2.34
+imageio-ffmpeg>=0.4
+moviepy>=1.0
+opencv-python-headless>=4.9
+pygame>=2.5                    # highway-env's renderer
+
+# Dev
+pytest>=8.0
+ruff>=0.4

@@ -1,0 +1,40 @@
+# PPO, seed 2. Solo training on track A with IDM traffic.
+# Reward is NOT specified here -- it is read from configs/reward.yaml so PPO and
+# GRPO provably optimise the same objective.
+name: ppo_seed2
+algo: ppo
+seed: 2
+group: ppo_solo
+
+total_steps: 2_000_000
+n_envs: 16                 # tune to available cores; env stepping is the bottleneck
+device: auto
+
+eval_every: 100_000
+eval_episodes: 20
+checkpoint_every: 250_000
+
+env:
+  track: a
+  n_traffic: 4
+  n_agents: 1
+  obs_type: kinematics
+  vehicles_count: 5
+  laps_to_finish: 1
+  duration: 60
+  policy_frequency: 5
+  seed: 2
+
+ppo:
+  learning_rate: 3.0e-4
+  n_epochs: 10
+  batch_size: 256
+  clip_range: 0.2
+  entropy_coef: 0.01
+  max_grad_norm: 0.5
+  hidden_sizes: [64, 64]
+  log_std_init: -0.5
+  n_steps: 512
+  gamma: 0.99
+  gae_lambda: 0.95
+  vf_coef: 0.5

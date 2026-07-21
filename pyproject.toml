@@ -1,0 +1,22 @@
+[project]
+name = "racing-grpo"
+version = "0.1.0"
+description = "Critic-free RL under competitive distribution shift: PPO vs GRPO on highway-env racetracks"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["legacy"]  # archived prior project; not maintained
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+ignore = [
+    "E501",  # line length handled by the formatter
+]
+
+[tool.pytest.ini_options]
+# Make the project packages importable without installation.
+pythonpath = ["."]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]

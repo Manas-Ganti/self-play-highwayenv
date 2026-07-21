@@ -1,0 +1,17 @@
+# Geometry transfer (Axis 2). Train once at width=10, length=300; evaluate on
+# the full 4x4 grid without retraining.
+
+experiment_name: geometry_sweep
+base_config: base.yaml
+
+sweep:
+  axes:
+    - param: env.track_width
+      values: [8, 10, 12, 14]
+    - param: env.road_length
+      values: [200, 300, 400, 500]
+  base_config: base.yaml
+  train_on:
+    track_width: 10
+    road_length: 300
+  eval_on: all_combinations

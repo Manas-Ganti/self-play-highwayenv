@@ -1,0 +1,11 @@
+# Track A -- training and primary evaluation geometry.
+track: a
+n_traffic: 4                # FIXED across every condition; never an experimental axis
+n_agents: 1
+obs_type: kinematics
+vehicles_count: 5           # nearby vehicles in the observation (excluding ego)
+laps_to_finish: 1
+duration: 60                # simulated seconds
+policy_frequency: 5
+simulation_frequency: 15
+seed: 0

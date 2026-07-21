@@ -1,0 +1,87 @@
+# Project log
+
+Chronological record of phase gates, decisions, and protocol amendments.
+Every phase gate gets an entry here and a commit (CLAUDE.md §5, §8).
+
+---
+
+## 2026-07-13 — Repository restructured onto the new CLAUDE.md spec
+
+The repo previously implemented a **different project**: "Competitive Self-Play
+Racetrack RL" (SB3 SAC/PPO, self-play from step one, discrete meta-actions,
+domain-randomised physics, geometry/physics transfer sweeps). The new spec asks a
+different research question, so the code was rebuilt to §6's layout rather than
+patched.
+
+The old modules are archived under `legacy/` (not deleted — this repo has no git
+history to recover them from). See `legacy/README.md` for what each one was.
+
+### Why almost nothing was reusable
+
+| Old design | New spec | Consequence |
+|---|---|---|
+| Observation had explicit `opponent_x`, `opponent_vx`, `opponent_lap_progress` features | "Never add a rival-identity feature" (§3) | Observation rebuilt from scratch; this one is load-bearing, not cosmetic |
+| Self-play from step one | Solo training, rival only at eval | Training env is now single-agent; PettingZoo is eval-only |
+| SB3 SAC + PPO wrappers | Custom PyTorch PPO + GRPO sharing `algos/common/` | New algorithm layer; SB3 retained only for Phase 1/2 validation |
+| Discrete meta-actions | `ContinuousAction` (steering + throttle) | New action space |
+| Reward registry (sparse/dense/hybrid), swept as a research axis | One frozen dense reward in `configs/reward.yaml` | Registry dropped; reward is now a constant of the experiment, not a variable |
+| Physics/geometry domain randomisation | Fixed traffic (4), fixed track A | Randomisers dropped; track C is a Phase 7 ablation only |
+
+### Environment decisions worth flagging (§0 asks for disagreements to be noted)
+
+1. **Traffic density.** Stock `RacetrackEnv._make_vehicles` spawns
+   `rng.integers(other_vehicles)` traffic cars — a *random* count in `[0, N)` — and
+   then silently *drops* any that fail its spawn-separation check. Both would make
+   traffic density an uncontrolled confound between PPO and GRPO runs. Overridden
+   in `envs/tracks.py`: exactly 4 vehicles, resampled rather than dropped.
+2. **Throttle.** Stock `racetrack-v0` ships `ContinuousAction(longitudinal=False)`
+   — steering only, speed fixed. That would make lap time a non-decision and gut
+   the racing problem. Enabled both axes.
+3. **Track C** is highway-env's `racetrack-large-v0` rather than bespoke geometry:
+   held-out and genuinely different, with no new geometry code to get wrong.
+4. **`laps_to_finish` = 1, not 2.** Track A's lap is 348 m and the speed limit is
+   10 m/s, so two laps needs ~70 s against a 60 s horizon — `finished` could never
+   fire, `lap_completion_rate` would be pinned at 0, and the Phase 1 gate would be
+   unpassable for reasons unrelated to the agent. Guarded by
+   `tests/test_env.py::test_the_race_is_actually_finishable_within_the_horizon`.
+5. **Aggressor attribution.** Closing *speed* is symmetric between two vehicles —
+   it is a property of the pair — so it cannot name a rammer on its own. Attribution
+   compares each agent's own velocity component *toward* the other; the one
+   contributing more of the approach is the aggressor. A pair that was not closing
+   is a draw, not a coin-flip loss. To be validated against video in Phase 5.
+
+### Bugs caught while wiring this up
+
+- **Action order.** highway-env's `ContinuousAction` is `[throttle, steering]`, not
+  `[steering, throttle]`. A learned policy is indifferent (it learns whatever
+  mapping it is handed), so this was invisible until the scripted IDM floor drove
+  off the track within 40 m on every episode. The floor now completes a clean lap.
+- **GAE across truncation.** Terminations and truncations are stored separately;
+  a time-limit cutoff bootstraps off `V(final_obs)` instead of being treated as a
+  terminal state with value 0. Tested in `tests/test_advantages.py`.
+
+---
+
+## Phase status
+
+- [x] **Phase 0 — Scaffold.** Repo at §6 layout; 61 tests green; throughput
+      profiled (`report/throughput.md`).
+      *Gate: PASSED* — `pytest` green on collector determinism + advantage math;
+      `scripts/profile_env.py` reports ~390 steps/s (8 envs, 8-core laptop).
+      Re-profile on the A100 node before Phase 4.
+- [ ] **Phase 1 — Env validation via SB3 PPO pilot.** Not started.
+      *Gate:* ≥90% of eval episodes complete a lap without collision within 2M steps.
+      **`configs/reward.yaml` is provisional until this gate passes, then frozen.**
+- [ ] **Phase 2 — Custom PPO parity vs SB3.** Not started. Do not build GRPO until
+      this passes.
+- [ ] **Phase 3 — GRPO + matched HP search.** Code is in place
+      (`algos/grpo.py`, `scripts/hp_search.py`); the search has not been run.
+- [ ] **Phase 4 — Full solo runs.** Not started.
+- [ ] **Phase 5 — Head-to-head evaluation.** Harness in place; needs Phase 4 runs.
+- [ ] **Phase 6 — Analysis + report.** Not started.
+- [ ] **Phase 7 — Stretch.** Not started.
+
+## Protocol amendments
+
+*(None yet. `configs/reward.yaml` has not been frozen — that happens at the Phase 1
+gate. Any change to it after that point must be recorded here.)*

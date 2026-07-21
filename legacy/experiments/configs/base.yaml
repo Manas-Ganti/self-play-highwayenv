@@ -1,0 +1,54 @@
+# Default environment + training hyperparameters.
+# Experimental variants inherit from this file and override only what changes.
+# Never edit this file for a one-off experiment — create a new YAML instead.
+
+experiment_name: base
+
+env:
+  track_width: 10
+  road_length: 300
+  vehicle_drag: 0.4
+  vehicle_mass_scale: 1.0
+  lap_count: 2
+  seed: 0
+
+reward:
+  type: sparse          # sparse | dense | hybrid
+  dense:
+    lambda_progress: 1.0
+    lambda_speed: 0.3
+    lambda_crash: 5.0
+    lambda_competitive: 0.5
+
+training:
+  algorithm: sac        # ppo | sac
+  total_timesteps: 1_000_000
+  checkpoint_interval: 50_000
+  opponent_pool_max_size: 50
+  pool_temperature: 200.0
+  device: mps           # mps | cpu | cuda
+  seed: 0
+
+  ppo:
+    n_steps: 2048
+    batch_size: 64
+    n_epochs: 10
+    learning_rate: 3.0e-4
+    clip_range: 0.2
+
+  sac:
+    buffer_size: 200_000
+    learning_starts: 5_000
+    batch_size: 256
+    tau: 0.005
+    learning_rate: 3.0e-4
+
+evaluation:
+  episodes: 50
+  record_trajectories: true
+  metrics:
+    - win_rate
+    - elo
+    - mean_lap_time
+    - crash_rate
+    - overtake_count

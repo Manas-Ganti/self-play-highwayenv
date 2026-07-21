@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# Reproduced from config + seed; never committed.
+results/
+wandb/
+report/figures/
+report/videos/
+
+# Local Claude Code settings
+.claude/settings.local.json

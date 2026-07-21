@@ -1,0 +1,67 @@
+# Pre-registered hyperparameter search space (Phase 3).
+#
+# THE MATCHING IS THE EXPERIMENT. Both algorithms get:
+#   * the same number of trials (n_trials)
+#   * the same grid, value-for-value, on every hyperparameter they share
+#   * the same seed, the same env, the same step budget per trial
+#
+# Giving GRPO extra trials to "fix" underperformance would answer a different
+# question than the one this project asks (CLAUDE.md §8). scripts/hp_search.py
+# asserts the shared grids are identical and refuses to run if they are not.
+
+n_trials: 30              # per algorithm, random search
+trial_steps: 300_000      # short-budget trials; the best config is then run to 2M
+trial_seed: 0
+metric: final_eval/mean_return   # selection criterion, identical for both
+
+# --- Shared: sampled from IDENTICAL grids for PPO and GRPO --------------------
+shared:
+  learning_rate:
+    distribution: log_uniform
+    low: 5.0e-5
+    high: 1.0e-3
+  n_epochs:
+    distribution: choice
+    values: [4, 10, 20]
+  batch_size:
+    distribution: choice
+    values: [128, 256, 512]
+  clip_range:
+    distribution: choice
+    values: [0.1, 0.2, 0.3]
+  entropy_coef:
+    distribution: log_uniform
+    low: 1.0e-4
+    high: 5.0e-2
+  max_grad_norm:
+    distribution: choice
+    values: [0.5, 1.0]
+  hidden_sizes:
+    distribution: choice
+    values: [[64, 64], [256, 256]]
+  log_std_init:
+    distribution: choice
+    values: [-1.0, -0.5, 0.0]
+
+# --- Algorithm-specific: no shared counterpart, so no matching to violate -----
+# These exist only because one algorithm has a critic and the other has groups.
+ppo:
+  n_steps:
+    distribution: choice
+    values: [256, 512, 1024]
+  gamma:
+    distribution: choice
+    values: [0.98, 0.99, 0.995]
+  gae_lambda:
+    distribution: choice
+    values: [0.9, 0.95, 0.98]
+  vf_coef:
+    distribution: choice
+    values: [0.25, 0.5, 1.0]
+
+grpo:
+  # G is fixed at 8 for the headline run; {4, 8, 16} is a Phase 7 ablation, not a
+  # tuning knob, so that GRPO cannot win the comparison by buying more rollouts.
+  n_groups:
+    distribution: choice
+    values: [2, 4, 8]
