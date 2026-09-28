@@ -78,6 +78,11 @@ class EnvConfig(BaseModel):
         Observation family. Neither variant exposes rival identity.
     vehicles_count : int
         Nearby vehicles included in a kinematics observation (excluding ego).
+    grid_x, grid_y, grid_step : occupancy-grid extent, metres, in the ego frame
+        (x = ahead, y = lateral). The defaults are the original symmetric ±18 m
+        grid, so runs saved before these fields existed replay unchanged. The
+        forward extent is the policy's look-ahead: at speed v it must cover the
+        stopping distance to slower traffic (pilot #3, report/log.md).
     laps_to_finish : int
         Laps that constitute a finished race.
     duration : int
@@ -92,6 +97,9 @@ class EnvConfig(BaseModel):
 
     obs_type: ObsType = ObsType.KINEMATICS
     vehicles_count: int = Field(default=5, ge=1)
+    grid_x: tuple[float, float] = (-18.0, 18.0)
+    grid_y: tuple[float, float] = (-18.0, 18.0)
+    grid_step: float = Field(default=3.0, gt=0)
 
     laps_to_finish: int = Field(default=1, ge=1)
     duration: int = Field(default=60, ge=1)
@@ -147,8 +155,8 @@ class EnvConfig(BaseModel):
             observation = {
                 "type": "OccupancyGrid",
                 "features": ["presence", "vx", "vy", "on_road"],
-                "grid_size": [[-18, 18], [-18, 18]],
-                "grid_step": [3, 3],
+                "grid_size": [list(self.grid_x), list(self.grid_y)],
+                "grid_step": [self.grid_step, self.grid_step],
                 "as_image": False,
                 "align_to_vehicle_axes": True,
             }

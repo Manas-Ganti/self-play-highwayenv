@@ -3,6 +3,7 @@
     python scripts/sb3_pilot.py                      # track A, 2M steps, seed 0
     python scripts/sb3_pilot.py --total-steps 200000 --name pilot_smoke
     python scripts/sb3_pilot.py --obs-type occupancy   # road-aware observation (§3 allows either)
+    python scripts/sb3_pilot.py --obs-type occupancy --env "grid_x=[-12, 48]"   # any EnvConfig field
 
 The question this answers is about the *environment*, not the algorithm: can an
 off-the-shelf, known-correct PPO learn to lap track A in traffic? If it cannot,
@@ -30,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
+import yaml  # noqa: E402
 from stable_baselines3 import PPO  # noqa: E402
 from stable_baselines3.common.callbacks import BaseCallback  # noqa: E402
 from stable_baselines3.common.vec_env import SubprocVecEnv  # noqa: E402
@@ -38,7 +40,7 @@ from algos.common.config import RunConfig  # noqa: E402
 from algos.common.logger import Logger  # noqa: E402
 from algos.common.utils import resolve_device, set_seed  # noqa: E402
 from envs import solo_env_fn  # noqa: E402
-from envs.config import ObsType  # noqa: E402
+from envs.config import EnvConfig, ObsType  # noqa: E402
 from eval.solo import SoloEvalResult, evaluate_solo  # noqa: E402
 
 logging.basicConfig(
@@ -90,6 +92,24 @@ class EvalCallback(BaseCallback):
         return True
 
 
+def env_overrides(pairs: list[str]) -> dict:
+    """Parse ``KEY=VALUE`` overrides; validated against EnvConfig by the caller.
+
+    Validation (not ``model_copy``) is the point: a typo'd key or a wrong-typed
+    value must fail here, not silently train on the default.
+    """
+
+    out = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep:
+            raise SystemExit(f"--env expects KEY=VALUE, got {pair!r}")
+        if key not in EnvConfig.model_fields:
+            raise SystemExit(f"--env: {key!r} is not an EnvConfig field")
+        out[key] = yaml.safe_load(value)
+    return out
+
+
 def build_sb3(cfg: RunConfig, env, device: torch.device, tb_dir: Path) -> PPO:
     """SB3 PPO with the custom PPO's hyperparameters, mapped one-to-one."""
 
@@ -131,6 +151,13 @@ def main() -> None:
         choices=[o.value for o in ObsType],
         help="override the config's observation family (Phase 1 env iteration only)",
     )
+    parser.add_argument(
+        "--env",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="override an EnvConfig field, VALUE parsed as YAML; repeatable (Phase 1 only)",
+    )
     parser.add_argument("--no-wandb", action="store_true")
     args = parser.parse_args()
 
@@ -142,7 +169,10 @@ def main() -> None:
         update={
             "name": name,
             "seed": args.seed,
-            "env": cfg.env.model_copy(update={"seed": args.seed, "obs_type": obs_type}),
+            "env": EnvConfig.model_validate(
+                {**cfg.env.model_dump(), **env_overrides(args.env),
+                 "seed": args.seed, "obs_type": obs_type}
+            ),
             "total_steps": args.total_steps or cfg.total_steps,
             "group": "phase1_sb3",
             "use_wandb": cfg.use_wandb and not args.no_wandb,

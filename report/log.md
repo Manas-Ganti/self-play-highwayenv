@@ -204,6 +204,51 @@ points earned reaching the first corner, so "stand still" never beats driving
 early in training. PPO and GRPO both read this one file, so the comparison stays
 symmetric. Next: pilot #3, occupancy, same two seeds.
 
+## 2026-09-28 — Phase 1 pilot #3: FAILED; the reward change did not help
+
+SB3 PPO, occupancy (±18 m grid), revised reward (collision/offtrack 20,
+lap_bonus 100). W&B `dcw4fmkd` (seed 0) and `dokh7c42` (seed 1).
+
+| final eval (50 ep) | #2 s0 / s1 | #3 s0 / s1 |
+|---|---|---|
+| lap completion | 0.48 / 0.72 | 0.58 / 0.60 |
+| collision | 0.30 / 0.26 | 0.30 / 0.36 |
+| off-track | 0.22 / 0.04 | 0.12 / 0.06 |
+| mean speed, last training eval | 16.6 / 12.4 | 18.2 / 14.1 |
+
+A crash now costs at least 120 (20 penalty plus the forfeited 100 bonus), about
+25× the old cost, yet speed rose and the collision rate did not fall. A policy
+that could see crashes coming would respond to that price, so this one probably
+cannot see them.
+
+**Field-of-view check.** The grid sees 18 m ahead. Braking at 5 m/s² from 18 m/s
+to traffic speed (~7 m/s) needs about 19 m of gap (v²/2a, plus one policy step,
+plus one car length). New tool: `analysis/crash_diagnosis.py` replays eval
+episodes and, for each crash, records the first-visible gap against the stopping
+gap needed. A deliberately reckless lane-keeping driver (IDM, 18 m/s target, no
+time gap) was run for 20 seeds per grid, locally. **This measures how far each
+grid can see on track A, not the trained policy:**
+
+| grid (ahead × lateral) | obs dim | median first-visible gap (rear-ends) | seen too late |
+|---|---|---|---|
+| ±18 × ±18 | 576 | 17.3 m | 14/16 |
+| −12…48 × ±18 | 960 | 22.6 m | 2/16 |
+| −12…48 × ±30 | 1600 | 28.4 m | 2/16 |
+| −18…54 × ±36 | 2304 | 41.7 m | 2/16 |
+
+Forward range alone gains less than expected. Track A's bends are tight, so a
+car further along the road sits off to the side in the ego frame, and lateral
+range matters as much as forward range.
+
+**Next.** (1) Run `crash_diagnosis.py` on the two #3 policies (ARC) to confirm
+that the *trained* agent's crashes are seen-too-late. (2) In parallel, pilot #4:
+`grid_x=[-12, 48]`, `grid_y=[-30, 30]`, reward unchanged from #3, so the grid is
+the only difference. If (1) shows the crashes were seen in time, #4 is
+cancelled, and the problem is control or reward rather than perception.
+`EnvConfig` grid fields default to the old ±18 m grid, so saved runs replay
+unchanged. The h2h env uses the same `highway_config`, so solo and h2h stay
+identical.
+
 ---
 
 ## Phase status
@@ -214,7 +259,7 @@ symmetric. Next: pilot #3, occupancy, same two seeds.
       `scripts/profile_env.py` reports ~390 steps/s (8 envs, 8-core laptop).
       Re-profile on the ARC node type before Phase 4 (`arc/README.md`).
 - [ ] **Phase 1 — Env validation via SB3 PPO pilot.** Pilot #1 (kinematics)
-      0.00; #2 (occupancy) 0.48 / 0.72; #3 (occupancy + revised reward) pending.
+      0.00; #2 (occupancy) 0.48 / 0.72; #3 (+ revised reward) 0.58 / 0.60; #4 (wider grid) pending.
       *Gate:* ≥90% of eval episodes complete a lap without collision within 2M steps.
       **`configs/reward.yaml` is provisional until this gate passes, then frozen.**
 - [ ] **Phase 2 — Custom PPO parity vs SB3.** Not started. Do not build GRPO until
