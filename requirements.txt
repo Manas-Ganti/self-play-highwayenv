@@ -1,5 +1,5 @@
 # Core RL stack
-torch>=2.2                     # install the cu121 wheel on the A100 node; see README
+torch>=2.8                     # sb3 2.9 needs >=2.8; on ARC, arc/setup_env.sh picks the CUDA build
 gymnasium>=1.0                 # vector envs with an explicit AutoresetMode
 highway-env>=1.11
 pettingzoo>=1.24               # Parallel API; head-to-head evaluation only
@@ -26,7 +26,8 @@ imageio>=2.34
 imageio-ffmpeg>=0.4
 moviepy>=1.0
 opencv-python-headless>=4.9
-pygame>=2.5                    # highway-env's renderer
+# No pygame here: highway-env >= 1.12 depends on pygame-ce, and both install into
+# the same `pygame/` package dir -- listing pygame too leaves them overwriting each other.
 
 # Dev
 pytest>=8.0

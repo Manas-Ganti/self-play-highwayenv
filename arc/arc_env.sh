@@ -36,6 +36,28 @@ if missing:
 EOF
 echo "[arc_env] python=$PY ($PY_VERSION)"
 
+# --- GPU jobs must actually get the GPU -----------------------------------------
+# `device: auto` falls back to CPU when CUDA is unusable, and a torch build newer
+# than the node's driver (cu130 needs driver >= 580) is unusable *silently*: the
+# job runs, just on the CPU, and a "GPU" profile measures the wrong thing. So a
+# job that was allocated a GPU asserts torch can use it.
+if [[ -n "${SLURM_JOB_GPUS:-${CUDA_VISIBLE_DEVICES:-}}" ]]; then
+  "$PY" - <<'EOF'
+import sys, torch
+if not torch.cuda.is_available():
+    import subprocess
+    try:
+        drv = subprocess.run(["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+                             capture_output=True, text=True).stdout.strip() or "unknown"
+    except OSError:
+        drv = "unknown (no nvidia-smi)"
+    sys.exit(f"[arc_env] FATAL: GPU allocated but torch {torch.__version__} (CUDA {torch.version.cuda}) "
+             f"cannot use it; node driver {drv}. Rebuild the env with a matching TORCH_CUDA "
+             "(arc/setup_env.sh header).")
+print(f"[arc_env] cuda ok: {torch.cuda.get_device_name(0)} | torch {torch.__version__}")
+EOF
+fi
+
 # --- Threads: the env workers own the cores ------------------------------------
 # Every AsyncVectorEnv worker is its own process, and torch in each of them
 # would otherwise spawn one thread per *node* core. On a 128-core DGX that is
