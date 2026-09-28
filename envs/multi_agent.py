@@ -82,7 +82,12 @@ class HeadToHeadRacetrackEnv(ParallelEnv):
         self.agents: list[str] = []
 
         env_cls = racetrack_class(config.track)
-        self._env = env_cls(config=config.highway_config(), render_mode=render_mode)
+        hw_config = config.highway_config()
+        if render_mode == "rgb_array":
+            # Draw to an in-memory surface; never open a window. This is what makes
+            # headless nodes render at all -- see arc/arc_env.sh ("Headless rendering").
+            hw_config["offscreen_rendering"] = True
+        self._env = env_cls(config=hw_config, render_mode=render_mode)
 
         # Homogeneous spaces; highway-env returns a tuple, one entry per agent.
         self._obs_space = self._env.observation_space[0]

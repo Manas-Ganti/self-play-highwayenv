@@ -119,7 +119,8 @@ def record(env, act, seed: int, label: str) -> tuple[list[np.ndarray], dict]:
     if frames and raw_peak == 0:
         raise SystemExit(
             "rendered frames are all black -- the SDL video driver is not drawing. "
-            f"SDL_VIDEODRIVER={os.environ.get('SDL_VIDEODRIVER')!r}; on macOS unset it."
+            f"SDL_VIDEODRIVER={os.environ.get('SDL_VIDEODRIVER')!r}; it must not be 'dummy' "
+            "(highway-env disables drawing under it). Try 'offscreen'."
         )
     # Hold the final frame ~1.5 s so the ending is actually visible.
     frames += frames[-1:] * 7
@@ -136,11 +137,11 @@ def main() -> None:
     parser.add_argument("--wandb", action="store_true", help="also upload to W&B (racing-grpo)")
     args = parser.parse_args()
 
-    # Headless Linux (ARC compute/login nodes) needs SDL's dummy driver. On macOS
-    # the dummy driver silently renders all-black frames with pygame 2.6, while the
-    # native one works, so only default to dummy off-Mac.
-    if sys.platform != "darwin":
-        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    # highway-env draws nothing when SDL_VIDEODRIVER == "dummy" (its EnvViewer
+    # disables itself), so replace dummy -- which old shells and launchers set --
+    # with SDL's `offscreen` driver, which renders headless on Linux and macOS.
+    if os.environ.get("SDL_VIDEODRIVER", "dummy") == "dummy":
+        os.environ["SDL_VIDEODRIVER"] = "offscreen"
     env_cfg = load_env_config(args.run)
     env = make_solo_env(env_cfg, render_mode="rgb_array")
     act = load_policy(args.run, args.policy, env)

@@ -255,3 +255,23 @@ class TestAggressorAttribution:
             [np.array([5.0, 0.0]), np.array([-5.0, 0.0])],
         )
         assert aggressor is None
+
+
+class TestRendering:
+    """Videos are evidence (pilot diagnosis, the Phase 5 ramming review), and a
+    broken headless setup does not raise -- it renders black. highway-env's
+    EnvViewer disables drawing entirely when SDL_VIDEODRIVER == "dummy", which is
+    exactly what headless launchers conventionally set."""
+
+    @pytest.mark.parametrize("n_agents", [1, 2])
+    def test_rgb_array_frames_are_not_black_headless(self, cfg, monkeypatch, n_agents):
+        monkeypatch.setenv("SDL_VIDEODRIVER", "offscreen")  # what arc/arc_env.sh sets
+        if n_agents == 1:
+            env = make_solo_env(cfg, render_mode="rgb_array")
+        else:
+            env = make_h2h_env(cfg.model_copy(update={"n_agents": 2}), render_mode="rgb_array")
+        env.reset(seed=0)
+        frame = np.asarray(env.render())
+        env.close()
+        assert frame.ndim == 3 and frame.shape[2] == 3
+        assert frame.max() > 0, "all-black frame: the renderer drew nothing"

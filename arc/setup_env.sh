@@ -48,7 +48,7 @@ if len(installed) != 1:
 EOF
   "$PY" -m pip check || echo "(pip check reported conflicts above -- read them)"
   # Pure logic, no GPU: collector determinism, advantage math, env invariants.
-  SDL_VIDEODRIVER=dummy MPLBACKEND=Agg "$PY" -m pytest -q
+  SDL_VIDEODRIVER=offscreen MPLBACKEND=Agg "$PY" -m pytest -q
 }
 
 if [[ "${1:-}" == "--verify" ]]; then verify; exit 0; fi

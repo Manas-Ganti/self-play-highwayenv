@@ -66,9 +66,11 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
 
 # --- Headless rendering --------------------------------------------------------
-# highway-env renders through pygame in software. No RT cores are involved (the
-# Isaac Sim constraint does not apply here), so video export works on any node.
-export SDL_VIDEODRIVER=dummy
+# highway-env renders through pygame in software, so no RT cores are needed.
+# NOT `dummy`: highway-env's EnvViewer sets `enabled = False` when
+# SDL_VIDEODRIVER == "dummy" and then draws nothing -- every frame is black, no
+# error. SDL's `offscreen` driver works without a display and is not special-cased.
+export SDL_VIDEODRIVER=offscreen
 export SDL_AUDIODRIVER=dummy
 export MPLBACKEND=Agg
 

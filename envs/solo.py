@@ -39,7 +39,12 @@ class SoloRacetrackEnv(gym.Env):
         self._dt = 1.0 / config.policy_frequency
 
         env_cls = racetrack_class(config.track)
-        self._env = env_cls(config=config.highway_config(), render_mode=render_mode)
+        hw_config = config.highway_config()
+        if render_mode == "rgb_array":
+            # Draw to an in-memory surface; never open a window. This is what makes
+            # headless nodes render at all -- see arc/arc_env.sh ("Headless rendering").
+            hw_config["offscreen_rendering"] = True
+        self._env = env_cls(config=hw_config, render_mode=render_mode)
 
         self.observation_space = self._env.observation_space
         self.action_space = self._env.action_space

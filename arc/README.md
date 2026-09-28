@@ -17,7 +17,7 @@ MLPs (≤ ~150k parameters). **Nothing in this project needs a GPU:**
 | env stepping (most of the wall time) | CPU, one core per env |
 | policy forward + PPO/GRPO updates | CPU (tiny MLPs; `device: auto` picks CPU when no GPU is allocated) |
 | eval, head-to-head, statistics | CPU |
-| Phase 5 videos | CPU (pygame software rendering; `SDL_VIDEODRIVER=dummy`) |
+| Phase 5 videos | CPU (pygame software rendering; `SDL_VIDEODRIVER=offscreen`, never `dummy`: highway-env draws nothing under `dummy`) |
 
 Given one partition, OWL `normal_q` wins on everything this workload uses:
 

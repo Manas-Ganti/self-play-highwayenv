@@ -153,9 +153,17 @@ yet, so this is not a protocol amendment. The reward is unchanged.
 
 `analysis/record_solo.py --run <run dir>` replays a run on its own eval seeds and
 writes stamped mp4s, uploading them to W&B with `--wandb`. `--policy straight`
-replays the zero-steer reference on the same seeds. Rendering fails silently
-(black frames, no error) under SDL's `dummy` driver on macOS, so the recorder
-uses `dummy` only on Linux and refuses to write all-black frames.
+replays the zero-steer reference on the same seeds.
+
+**Rendering bug, found by the black-frame guard on ARC:** highway-env's
+`EnvViewer` sets `enabled = False` whenever `SDL_VIDEODRIVER == "dummy"`, and then
+draws nothing. Every frame comes out black, on Linux and macOS alike, with no
+error. `arc_env.sh` set `dummy` for every job, so all headless video (including
+the Phase 5 ramming review) would have been blank. Fix: SDL's `offscreen` driver,
+plus highway-env `offscreen_rendering: True` whenever an env is built with
+`render_mode="rgb_array"`. `tests/test_env.py::TestRendering` asserts non-black
+frames for the solo and h2h envs. The recorder still refuses to write all-black
+frames.
 
 Open item: `analysis/video.py` (Phase 5 h2h) builds its env from the *default*
 config (kinematics). If the gate passes on occupancy, it must read the run's
