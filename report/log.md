@@ -249,6 +249,31 @@ cancelled, and the problem is control or reward rather than perception.
 unchanged. The h2h env uses the same `highway_config`, so solo and h2h stay
 identical.
 
+## 2026-09-28 — Crash diagnosis of the pilot #3 policies: split verdict
+
+`analysis/crash_diagnosis.py`, 50 eval episodes each, run on ARC.
+
+| | seed 0 | seed 1 |
+|---|---|---|
+| crash types | 11 rear-end, 4 side | 11 rear-end, 6 side, 1 hit from behind |
+| mean speed at impact (ego / other) | 16.1 / 7.0 m/s | 9.1 / 5.1 m/s |
+| rear-ends first seen inside stopping distance | **7/11** | 4/11 |
+
+There are two failure modes:
+1. **Perception-limited** (dominant in seed 0). At ~16 m/s the ±18 m grid
+   reveals slower traffic inside braking distance. Pilot #4 (wider grid)
+   targets this.
+2. **Seen in time and still hit** (dominant in seed 1: 7/11 rear-ends were
+   visible early enough, at a closing speed of ~4 m/s, which needs only ~7 m),
+   plus 10 side contacts across both seeds. A wider grid does not address
+   these. The cause is not yet known. Candidates: the policy is under-trained
+   for this input, or the 3 m cells give too coarse a gap signal, or the side
+   contacts come from overtaking attempts in the two-lane bends. Next step is to
+   watch those exact episodes (`record_solo.py --crashes seen-in-time|side`)
+   before changing anything.
+
+Pilot #4 is still justified by mode 1 and runs as planned.
+
 ---
 
 ## Phase status

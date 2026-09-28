@@ -3,6 +3,7 @@
     python analysis/record_solo.py --run results/phase1/sb3_ppo_seed0            # 3 eval episodes
     python analysis/record_solo.py --run results/ppo_seed0 --n 5 --wandb        # + upload to W&B
     python analysis/record_solo.py --run results/phase1/sb3_ppo_seed0 --policy straight
+    python analysis/record_solo.py --run results/phase1/p3_occupancy_seed1 --crashes seen-in-time
 
 Replays the same fixed eval seeds ``evaluate_solo`` scores (``10_000 + i``), so the
 videos are the episodes behind the logged numbers -- not a fresh, luckier draw.
@@ -128,6 +129,30 @@ def record(env, act, seed: int, label: str) -> tuple[list[np.ndarray], dict]:
                     "steps": step, "speed": float(info["speed"])}
 
 
+def select_seeds(args) -> list[int]:
+    """Which eval seeds to record: first --n, an explicit list, or diagnosed crashes."""
+
+    if args.crashes:
+        path = args.run / "crash_diagnosis.json"
+        if not path.exists():
+            raise SystemExit(f"{path} missing -- run analysis/crash_diagnosis.py --run {args.run}")
+        recs = json.loads(path.read_text())
+        rear = [r for r in recs if r["type"].startswith("rear-end") and "seen_too_late" in r]
+        chosen = {
+            "all": recs,
+            "seen-in-time": [r for r in rear if not r["seen_too_late"]],
+            "too-late": [r for r in rear if r["seen_too_late"]],
+            "side": [r for r in recs if r["type"] == "side contact"],
+        }[args.crashes]
+        seeds = [r["seed"] for r in chosen][: args.n] if args.n else [r["seed"] for r in chosen]
+        if not seeds:
+            raise SystemExit(f"no '{args.crashes}' crashes in {path}")
+        return seeds
+    if args.seeds:
+        return args.seeds
+    return [EVAL_SEED_OFFSET + i for i in range(args.n)]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True, help="run dir (results/...)")
@@ -135,6 +160,12 @@ def main() -> None:
     parser.add_argument("--policy", choices=["trained", "straight"], default="trained")
     parser.add_argument("--out", type=Path, default=Path("report/videos/solo"))
     parser.add_argument("--wandb", action="store_true", help="also upload to W&B (racing-grpo)")
+    parser.add_argument("--seeds", type=int, nargs="+", help="exact eval seeds (overrides --n)")
+    parser.add_argument(
+        "--crashes",
+        choices=["all", "seen-in-time", "too-late", "side"],
+        help="record only crashes listed in <run>/crash_diagnosis.json (run that first)",
+    )
     args = parser.parse_args()
 
     # highway-env draws nothing when SDL_VIDEODRIVER == "dummy" (its EnvViewer
@@ -151,14 +182,14 @@ def main() -> None:
     label = f"{run_name}  obs={env_cfg.obs_type.value}"
 
     results = []
-    for i in range(args.n):
-        seed = EVAL_SEED_OFFSET + i
+    seeds = select_seeds(args)
+    for i, seed in enumerate(seeds):
         frames, res = record(env, act, seed, label)
         path = out_dir / f"ep{i:02d}_seed{seed}_{res['outcome']}_{res['distance']:.0f}m.mp4"
         write_video(frames, path)
         res["path"] = str(path)
         results.append(res)
-        print(f"  [{i + 1}/{args.n}] {res['outcome']:8s} {res['distance']:6.1f} m  "
+        print(f"  [{i + 1}/{len(seeds)}] {res['outcome']:8s} {res['distance']:6.1f} m  "
               f"{res['steps']:3d} steps  -> {path}")
     env.close()
 
