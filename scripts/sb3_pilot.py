@@ -2,6 +2,7 @@
 
     python scripts/sb3_pilot.py                      # track A, 2M steps, seed 0
     python scripts/sb3_pilot.py --total-steps 200000 --name pilot_smoke
+    python scripts/sb3_pilot.py --obs-type occupancy   # road-aware observation (§3 allows either)
 
 The question this answers is about the *environment*, not the algorithm: can an
 off-the-shelf, known-correct PPO learn to lap track A in traffic? If it cannot,
@@ -37,6 +38,7 @@ from algos.common.config import RunConfig  # noqa: E402
 from algos.common.logger import Logger  # noqa: E402
 from algos.common.utils import resolve_device, set_seed  # noqa: E402
 from envs import solo_env_fn  # noqa: E402
+from envs.config import ObsType  # noqa: E402
 from eval.solo import SoloEvalResult, evaluate_solo  # noqa: E402
 
 logging.basicConfig(
@@ -124,16 +126,23 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--total-steps", type=int, help="override the 2M budget (smoke tests)")
     parser.add_argument("--name", type=str, default=None)
+    parser.add_argument(
+        "--obs-type",
+        choices=[o.value for o in ObsType],
+        help="override the config's observation family (Phase 1 env iteration only)",
+    )
     parser.add_argument("--no-wandb", action="store_true")
     args = parser.parse_args()
 
     cfg = RunConfig.load(args.config)
-    name = args.name or f"phase1/sb3_ppo_seed{args.seed}"
+    obs_type = ObsType(args.obs_type) if args.obs_type else cfg.env.obs_type
+    tag = "" if obs_type is ObsType.KINEMATICS else f"{obs_type.value}_"
+    name = args.name or f"phase1/sb3_ppo_{tag}seed{args.seed}"
     cfg = cfg.model_copy(
         update={
             "name": name,
             "seed": args.seed,
-            "env": cfg.env.model_copy(update={"seed": args.seed}),
+            "env": cfg.env.model_copy(update={"seed": args.seed, "obs_type": obs_type}),
             "total_steps": args.total_steps or cfg.total_steps,
             "group": "phase1_sb3",
             "use_wandb": cfg.use_wandb and not args.no_wandb,
@@ -154,7 +163,10 @@ def main() -> None:
 
     env = SubprocVecEnv([solo_env_fn(cfg.env) for _ in range(cfg.n_envs)])
     model = build_sb3(cfg, env, device, run_dir / "sb3_tb")
-    logger.info("SB3 PPO pilot | device=%s n_envs=%d steps=%d", device, cfg.n_envs, cfg.total_steps)
+    logger.info(
+        "SB3 PPO pilot | obs=%s device=%s n_envs=%d steps=%d",
+        obs_type.value, device, cfg.n_envs, cfg.total_steps,
+    )
 
     start = time.time()
     model.learn(total_timesteps=cfg.total_steps, callback=EvalCallback(cfg, run_logger))

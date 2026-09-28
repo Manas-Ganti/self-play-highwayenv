@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from envs import make_h2h_env, make_solo_env
-from envs.config import EnvConfig, RewardConfig
+from envs.config import EnvConfig, ObsType, RewardConfig
 from envs.multi_agent import DRAW, LOSS, WIN, attribute_aggressor
 from envs.progress import TrackGeometry
 from envs.reward import compute_reward
@@ -26,10 +26,14 @@ def cfg() -> EnvConfig:
     return EnvConfig(reward=RewardConfig.load(), duration=10)
 
 
+@pytest.mark.parametrize("obs_type", list(ObsType))
 class TestObservationInvariants:
-    def test_observation_has_no_rival_identity_feature(self, cfg):
-        """The kinematics features must describe motion only -- never who is who."""
+    """Held for *both* observation families -- §3 allows either, never an identity feature."""
 
+    def test_observation_has_no_rival_identity_feature(self, cfg, obs_type):
+        """Features must describe motion and road only -- never who is who."""
+
+        cfg = cfg.model_copy(update={"obs_type": obs_type})
         features = cfg.highway_config()["observation"]["features"]
         forbidden = {"is_agent", "is_rival", "agent_id", "controlled", "is_controlled", "rival"}
         assert not (set(features) & forbidden)
@@ -39,7 +43,7 @@ class TestObservationInvariants:
             "presence", "x", "y", "vx", "vy", "cos_h", "sin_h", "on_road", "heading",
         }
 
-    def test_solo_and_h2h_observations_have_the_same_shape(self, cfg):
+    def test_solo_and_h2h_observations_have_the_same_shape(self, cfg, obs_type):
         """A policy trained solo must be able to consume an h2h observation.
 
         Same shape, same features, same ordering: the rival simply occupies one of
@@ -47,6 +51,7 @@ class TestObservationInvariants:
         diverged, the transfer being measured would be an artefact of the wrapper.
         """
 
+        cfg = cfg.model_copy(update={"obs_type": obs_type})
         solo = make_solo_env(cfg)
         h2h = make_h2h_env(cfg.model_copy(update={"n_agents": 2}))
 

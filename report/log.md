@@ -115,6 +115,40 @@ OWL job 968475, node owl017, 32 cores, CPU policy. Full table in
 - The report's `cpu cores: 96` line was wrong: it showed the node total, not the
   job's 32. `profile_env.py` now reports the allocation.
 
+## 2026-09-28 — Phase 1 pilot #1: FAILED (kinematics observation)
+
+SB3 PPO, seed 0, 2M steps, track A, `obs_type: kinematics`. OWL, 35 min wall.
+W&B run `qqdbcyk0`; `results/phase1/sb3_ppo_seed0/solo_eval.json` on ARC.
+
+| final eval (50 ep) | value |
+|---|---|
+| lap completion | **0.00** (gate ≥ 0.90) |
+| off-track | 0.98 |
+| collision | 0.02 |
+| mean speed | ~15.8 m/s (during training evals) |
+| mean distance | ~65 m of a 348 m lap |
+
+**Diagnosis: the policy learned "full throttle, straight ahead".** A scripted
+throttle-0.3, zero-steer controller leaves the road at 77.8 m at 15.4 m/s. That
+is the same place and speed as the trained agent. The lap opens with a 58 m
+straight (`a→b`) and then a curve (`b→c`); the agent never takes the first corner.
+
+**Root cause: the kinematics observation carries no road information.** The
+ego row is `[presence, x, y, vx, vy, cos_h, sin_h]` with x/y absolute and
+normalised by ±200 m, so 1 m of lateral drift moves the input by 0.005. There is
+no lane offset, no heading-to-lane error, and no upcoming curvature. Steering
+would require memorising the track from a vanishing position signal. Speed rose
+through training (evals: 10 → 15.8 m/s) while distance did not, because progress
+reward is maximised by driving the straight as fast as possible.
+
+**Next:** `obs_type: occupancy`, which §3 already allows. It is highway-env's own
+racetrack observation: 4 layers (presence, vx, vy, **on_road**) on a 12×12 grid
+of ±18 m, aligned to the vehicle. It is rival-agnostic (no identity layer) and
+has the same flattened shape in the solo and h2h envs (576). The invariant tests
+now run for both observation families. Env iteration before the gate is within
+protocol (§5 Phase 1: "simplify... and re-run"). Neither algorithm has trained
+yet, so this is not a protocol amendment. The reward is unchanged.
+
 ---
 
 ## Phase status
@@ -124,8 +158,8 @@ OWL job 968475, node owl017, 32 cores, CPU policy. Full table in
       *Gate: PASSED* — `pytest` green on collector determinism + advantage math;
       `scripts/profile_env.py` reports ~390 steps/s (8 envs, 8-core laptop).
       Re-profile on the ARC node type before Phase 4 (`arc/README.md`).
-- [ ] **Phase 1 — Env validation via SB3 PPO pilot.** Script ready
-      (`scripts/sb3_pilot.py`); not yet run.
+- [ ] **Phase 1 — Env validation via SB3 PPO pilot.** Pilot #1 (kinematics
+      obs) FAILED 0.00 lap rate; pilot #2 (occupancy obs) pending.
       *Gate:* ≥90% of eval episodes complete a lap without collision within 2M steps.
       **`configs/reward.yaml` is provisional until this gate passes, then frozen.**
 - [ ] **Phase 2 — Custom PPO parity vs SB3.** Not started. Do not build GRPO until
