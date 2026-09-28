@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
-# Launch all seeds of one condition concurrently on a single GPU node.
+# Launch the seeds of one condition concurrently on a single node.
 # On VT ARC, run it inside a job: arc/submit.sh ... arc/condition.slurm <algo>
 #
-#   ./scripts/launch_condition.sh ppo            # seeds 0-4, 2M steps each
-#   ./scripts/launch_condition.sh grpo 5 2000000
+#   ./scripts/launch_condition.sh ppo                  # seeds 0-4, 2M steps each
+#   ./scripts/launch_condition.sh grpo 3 2000000       # seeds 0-2
+#   ./scripts/launch_condition.sh grpo 2 2000000 3     # seeds 3-4
 #
 # Why concurrent seeds rather than one fast run (CLAUDE.md §1): highway-env
-# stepping is pure-Python and CPU-bound, and the policy is a small MLP. One run
-# cannot saturate an A100 no matter how hard it tries, but five runs share it
-# trivially -- each takes a sliver of GPU memory. So the GPU is exploited by
-# *width*, and the CPU is the resource actually being rationed here.
+# stepping is pure-Python and CPU-bound, and the policy is a small MLP, so one
+# run cannot use a whole node. The CPU is the resource being rationed. When a
+# condition needs more cores than one node has (GRPO: 5 x 33), split it into
+# two jobs with FIRST_SEED.
 
 set -euo pipefail
 
-ALGO="${1:?usage: launch_condition.sh <ppo|grpo> [n_seeds] [total_steps]}"
+ALGO="${1:?usage: launch_condition.sh <ppo|grpo> [n_seeds] [total_steps] [first_seed]}"
 N_SEEDS="${2:-5}"
 TOTAL_STEPS="${3:-2000000}"
+FIRST_SEED="${4:-0}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -39,16 +41,16 @@ CORES=${#ALLOWED[@]}
 CORES_PER_RUN=$(( CORES / N_SEEDS ))
 if (( CORES_PER_RUN < 1 )); then CORES_PER_RUN=1; fi
 
-echo "launching $N_SEEDS x $ALGO @ ${TOTAL_STEPS} steps"
+echo "launching $N_SEEDS x $ALGO (seeds ${FIRST_SEED}-$(( FIRST_SEED + N_SEEDS - 1 ))) @ ${TOTAL_STEPS} steps"
 echo "  $CORES cores total, ~$CORES_PER_RUN per run"
 
 PIDS=()
-for (( SEED=0; SEED<N_SEEDS; SEED++ )); do
+for (( SEED=FIRST_SEED; SEED<FIRST_SEED+N_SEEDS; SEED++ )); do
   CONFIG="configs/${ALGO}_seed${SEED}.yaml"
   [[ -f "$CONFIG" ]] || { echo "missing $CONFIG"; exit 1; }
 
   LOG="${LOG_DIR}/${ALGO}_seed${SEED}.log"
-  START=$(( SEED * CORES_PER_RUN ))
+  START=$(( (SEED - FIRST_SEED) * CORES_PER_RUN ))
   CPU_LIST="$(IFS=,; echo "${ALLOWED[*]:START:CORES_PER_RUN}")"
 
   CMD=("$PY" scripts/train.py --config "$CONFIG" --seed "$SEED" --total-steps "$TOTAL_STEPS")
@@ -64,8 +66,9 @@ for (( SEED=0; SEED<N_SEEDS; SEED++ )); do
     "${CMD[@]}" > "$LOG" 2>&1 &
   fi
 
-  PIDS+=($!)
-  echo "  seed $SEED -> pid ${PIDS[-1]}, cores ${CPU_LIST}, log $LOG"
+  PID=$!
+  PIDS+=("$PID")
+  echo "  seed $SEED -> pid ${PID}, cores ${CPU_LIST}, log $LOG"
 done
 
 echo "waiting for ${#PIDS[@]} runs..."

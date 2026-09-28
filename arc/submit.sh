@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # The one way to submit a job for this project on VT ARC.
 #
-#   arc/submit.sh [--gpu a100|h200|l40s|owl] [--time HH:MM:SS] [--cpus N] [--mem 64G]
+#   arc/submit.sh [--gpu owl|a100|h200|l40s] [--time HH:MM:SS] [--cpus N] [--mem 64G]
 #                 [--partition P] [--qos Q] [--array 0-29] [--dry-run]
 #                 <arc/job.slurm> [passthrough args...]
 #
-# `--gpu owl` is a CPU-only job on OWL (96-core Genoa nodes, 3.8 GHz). This
-# workload is CPU-bound, so OWL is often the better choice (arc/README.md).
+# This project runs on OWL CPU nodes (the default, `--gpu owl`): the workload is
+# CPU-bound and only one partition's resources are available to it at a time
+# (arc/README.md). The GPU types remain as an alternative, not a second pool.
 #
-#   arc/submit.sh --time 00:30:00 arc/job.slurm scripts/profile_env.py --device cuda
-#   arc/submit.sh --time 06:00:00 arc/job.slurm scripts/sb3_pilot.py
-#   arc/submit.sh --cpus 96 --time 08:00:00 arc/condition.slurm ppo
-#   arc/submit.sh --array 0-29 --time 02:00:00 arc/search.slurm ppo
-#   arc/submit.sh --gpu owl --cpus 96 --time 08:00:00 arc/condition.slurm ppo
+#   arc/submit.sh --time 00:30:00 arc/job.slurm scripts/profile_env.py --device cpu
+#   arc/submit.sh --cpus 20 --time 08:00:00 arc/job.slurm scripts/sb3_pilot.py
+#   arc/submit.sh --cpus 90 --time 12:00:00 arc/condition.slurm ppo
+#   arc/submit.sh --array 0-29 --cpus 18 --time 03:00:00 arc/search.slurm ppo
 #
 # Why a wrapper instead of bare sbatch: partition, QOS and gres come as a set that
 # differs per GPU type and per wall time, and getting one wrong costs a queue
@@ -29,7 +29,7 @@
 
 set -euo pipefail
 
-GPU=a100
+GPU=owl
 TIME=04:00:00
 CPUS=32
 MEM=""

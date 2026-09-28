@@ -1,48 +1,41 @@
 # Running on VT ARC
 
-How this project runs on VT ARC: the OWL CPU nodes, and the A100 / H200
-(Tinkercliffs) and L40S (Falcon) GPU nodes.
+How this project runs on VT ARC. **Platform: OWL CPU nodes** (`normal_q`,
+the CPU allocation). Only one partition's resources can be used, and this
+project's work is CPU work, so everything runs there.
 It is distilled from the runbooks of two earlier projects on the same cluster. Every
 rule below cost one of them at least one wasted allocation. Account names and mail
 addresses are deliberately absent, because this repo is public.
 
-## What this workload is (and why it changes the GPU choice)
+## Why OWL CPU nodes
 
-highway-env stepping is pure-Python and CPU-bound, and the policies are 64–256-unit
-MLPs. **The GPU is almost idle. The allocation that matters is `--cpus-per-task`.**
-Consequences:
+highway-env stepping is pure Python and CPU-bound, and the policies are 64–256-unit
+MLPs (≤ ~150k parameters). **Nothing in this project needs a GPU:**
 
-- One GPU per job, always. Nothing here is multi-GPU, so NCCL (the H200 `ib0` trap)
-  never comes up.
-- Any of the three GPU types works. Pick whichever queue moves fastest: `squeue -p
-  a100_normal_q`, `h200_normal_q` and (on Falcon) `l40s_normal_q`. The H200's
-  141 GB is wasted on this workload, so a100 is the default.
-- Rendering (Phase 5 videos) is pygame in software, so **no RT cores are needed.**
-  The Isaac Sim "L40S only" rule does not apply. `arc_env.sh` sets
-  `SDL_VIDEODRIVER=dummy`.
-- **OWL is probably the best fit.** This workload needs many fast cores, and OWL
-  has them. Its Genoa nodes have 96 cores each and hold a 3.8 GHz boost clock,
-  while Tinkercliffs base nodes run at 2.0 GHz. highway-env steps each env in a
-  single Python thread, so clock speed feeds straight into steps/s. The
-  expectation is that one OWL node runs a PPO condition (5 × 17 cores) and uses no
-  GPU allocation. The profile jobs below test this before anything relies on it.
+| work | runs on |
+|---|---|
+| env stepping (most of the wall time) | CPU, one core per env |
+| policy forward + PPO/GRPO updates | CPU (tiny MLPs; `device: auto` picks CPU when no GPU is allocated) |
+| eval, head-to-head, statistics | CPU |
+| Phase 5 videos | CPU (pygame software rendering; `SDL_VIDEODRIVER=dummy`) |
 
-## Choosing where to run
+Given one partition, OWL `normal_q` wins on everything this workload uses:
 
-| | OWL (`--gpu owl`) | A100 / H200 / L40S |
-|---|---|---|
-| resource | up to 96 cores/node, 768 GB, no GPU | 1 GPU + whatever cores you request |
-| policy device | `cpu` (automatic: `device: auto` finds no CUDA) | `cuda` |
-| submit from | an OWL login node | Tinkercliffs (A100/H200), Falcon (L40S) |
-| best for | pilot, conditions, HP-search arrays, h2h eval | only if profiling shows the GPU speeds up updates |
+- **cores per job.** A full 96-core node. GPU partitions give about 16 cores per
+  GPU (128 per 8 GPUs, for both the Tinkercliffs A100s and the OWL B200s).
+- **clock speed.** Genoa at 3.8 GHz sustained. Each env steps in a single Python
+  thread, so clock speed feeds straight into steps/s.
+- **cost.** A GPU allocation would pay for a GPU that sits idle.
 
-The call comes from data. Run the profile job on both OWL and an A100, and use
-whichever reaches the higher steps/s. At the current MLP sizes (64–256 units) the
-GPU is expected to add nothing. If that holds, run everything on OWL.
+`submit.sh` defaults to OWL. The `--gpu a100|h200|l40s` paths still exist in
+case the project ever moves partitions, but they are not a second pool to mix
+with OWL.
 
-A GRPO condition needs 5 × 33 cores, which is more than one OWL node's 96. Split
-it: submit seeds 0–2 and 3–4 as separate jobs, or give each run fewer envs than
-cores. More envs than cores just slows every run down together.
+**Sizing rule:** give each concurrent run `n_envs + 1` cores and never exceed 96
+per job. PPO runs 16 envs, so a condition is 5 × 18 = 90 cores, one job. GRPO runs
+32 envs, so a condition is 5 × 33 = 165 cores and must be split into two jobs:
+seeds 0–2 (`grpo 3 2000000 0`) and seeds 3–4 (`grpo 2 2000000 3`). More envs than
+cores just slows every run down together.
 
 ## One-time setup (login node)
 
@@ -53,14 +46,14 @@ git clone git@github.com:Manas-Ganti/self-play-highwayenv.git
 cd self-play-highwayenv
 
 # 2. Dedicated env. Never reuse vrr / vrr-train / rtn.
-arc/setup_env.sh              # ~/miniconda3/envs/racing-grpo, python 3.11, torch cu121
+arc/setup_env.sh              # ~/miniconda3/envs/racing-grpo, python 3.11, torch (TORCH_CUDA)
                               # runs pytest at the end; writes arc/requirements.lock.txt
 
 # 3. Identity, outside the repo
 mkdir -p ~/.config/racing-grpo
 cat > ~/.config/racing-grpo/arc.env <<'EOF'
-RG_ACCOUNT=<gpu allocation>           # Tinkercliffs (A100/H200) + Falcon (L40S)
-RG_CPU_ACCOUNT=<owl cpu allocation>   # required for --gpu owl; GPU allocations can't run on OWL
+RG_CPU_ACCOUNT=<owl cpu allocation>   # every job (OWL is the platform)
+RG_ACCOUNT=<gpu allocation>           # only if the project ever moves to a GPU partition
 RG_MAIL_USER=<pid>@vt.edu
 EOF
 
@@ -74,7 +67,7 @@ EOF
 | `owl_normal_base` | 1000 | 7 days | 1 |
 | `owl_normal_long` | 500 | 14 days | 1 |
 
-`submit.sh --gpu owl` defaults to **`owl_normal_base`**, or `long` past 7 days.
+`submit.sh` defaults to **`owl_normal_base`**, or `long` past 7 days.
 On Tinkercliffs, "short" is simply the best tier. On OWL it costs twice the
 allocation, and these jobs hold dozens of cores for hours. Pass
 `--qos owl_normal_short` only when getting the job started sooner is worth
@@ -93,10 +86,10 @@ go **after** the `.slurm` file as argparse flags, where a typo fails loudly.
 
 | option | default | notes |
 |---|---|---|
-| `--gpu` | `a100` | `owl` → CPU-only OWL; `a100` / `h200` → Tinkercliffs; `l40s` → Falcon (submit from `falcon1`/`falcon2`) |
-| `--partition` / `--qos` | derived | override when a cluster's names differ |
-| `--time` | `04:00:00` | < 24 h → `*_short` QOS (highest priority); ≥ 24 h → `*_base` |
-| `--cpus` | `32` | **the real resource.** Size it from `report/throughput.md` |
+| `--gpu` | `owl` | OWL CPU nodes. (`a100`/`h200`/`l40s` exist only for a future partition move) |
+| `--partition` / `--qos` | derived | e.g. `--qos owl_normal_short` for priority at 2× cost |
+| `--time` | `04:00:00` | ≤ 7 days → `owl_normal_base`; longer → `owl_normal_long` |
+| `--cpus` | `32` | **the real resource.** Max 96 (one node). Size it from `report/throughput_owl.md` |
 | `--mem` | `2G × cpus` | never `0`: a job asking for the whole node cannot backfill |
 | `--array` | — | for `arc/search.slurm` |
 | `--dry-run` | — | print the `sbatch` line only |
@@ -106,31 +99,28 @@ go **after** the `.slurm` file as argparse flags, where a typo fails loudly.
 ```bash
 PY=~/miniconda3/envs/racing-grpo/bin/python
 
-# Phase 0 follow-up: profile OWL vs A100 (log.md asks for a re-profile). Decides where
-# everything else runs.
-arc/submit.sh --gpu owl --cpus 32 --time 00:30:00 arc/job.slurm scripts/profile_env.py \
-    --device cpu --env-counts 1 8 16 32 --out report/throughput_owl.md          # from owl1
+# Phase 0 follow-up: re-profile on OWL (log.md asks for this). Sets every --cpus below.
 arc/submit.sh --cpus 32 --time 00:30:00 arc/job.slurm scripts/profile_env.py \
-    --device cuda --env-counts 1 8 16 32 --out report/throughput_a100.md        # from tinkercliffs
-
-# Each command below also works with `--gpu owl` (submit from an OWL login node).
+    --device cpu --env-counts 1 8 16 32 --out report/throughput_owl.md
 
 # Phase 1: SB3 pilot. Gate: lap rate >= 0.90 (printed as "PHASE 1 GATE ...")
 arc/submit.sh --cpus 20 --time 08:00:00 arc/job.slurm scripts/sb3_pilot.py
 #   -> results/phase1/sb3_ppo_seed0/solo_eval.json ; then freeze configs/reward.yaml
 
 # Phase 2: custom PPO parity. 3 seeds each; SB3 seeds via --seed
-arc/submit.sh --cpus 60 --time 08:00:00 arc/condition.slurm ppo 3 2000000
+arc/submit.sh --cpus 54 --time 08:00:00 arc/condition.slurm ppo 3 2000000
 for s in 0 1 2; do arc/submit.sh --cpus 20 --time 08:00:00 arc/job.slurm scripts/sb3_pilot.py --seed $s; done
 
-# Phase 3: matched HP search. One trial per array task, same indices for both
-arc/submit.sh --array 0-29 --cpus 16 --time 02:00:00 arc/search.slurm ppo
-arc/submit.sh --array 0-29 --cpus 36 --time 02:00:00 arc/search.slurm grpo
+# Phase 3: matched HP search. One trial per array task, same indices for both.
+# GRPO trials run up to 64 envs (n_groups=8), hence the larger request.
+arc/submit.sh --array 0-29 --cpus 18 --time 03:00:00 arc/search.slurm ppo
+arc/submit.sh --array 0-29 --cpus 65 --time 03:00:00 arc/search.slurm grpo
 $PY scripts/hp_search.py --algo ppo --collect && $PY scripts/hp_search.py --algo grpo --collect
 
-# Phase 4: 5 seeds x {PPO, GRPO}, concurrently on one GPU each
-arc/submit.sh --cpus 96 --time 12:00:00 arc/condition.slurm ppo
-arc/submit.sh --cpus 96 --time 12:00:00 arc/condition.slurm grpo
+# Phase 4: 5 seeds x {PPO, GRPO}. PPO fits one node; GRPO is split across two jobs.
+arc/submit.sh --cpus 90 --time 12:00:00 arc/condition.slurm ppo
+arc/submit.sh --cpus 96 --time 12:00:00 arc/condition.slurm grpo 3 2000000 0
+arc/submit.sh --cpus 64 --time 12:00:00 arc/condition.slurm grpo 2 2000000 3
 
 # Phase 5: head-to-head round robin
 arc/submit.sh --cpus 32 --time 12:00:00 arc/job.slurm scripts/evaluate_h2h.py --results results/
@@ -181,9 +171,6 @@ arc/pull_results.sh --with-ckpt   # plus checkpoints, for local video export
 | warning on uncommitted changes | `.slurm` is copied at **submit** time and Python is read at **run** time. Edit on the Mac, push, `git pull` on ARC, then submit |
 | `WANDB_DIR=$HOME/wandb` | `/projects/$USER` is not writable |
 
-Two things behave differently from the other projects:
-
-- The Mac `.venv` is Python 3.12 and the ARC env is 3.11 (the spec's version).
-  The code runs on both, and the tests pass on 3.12 locally.
-- On macOS `/bin/bash` is 3.2, and `launch_condition.sh` needs bash ≥ 4.3.
-  ARC is fine. On the Mac, run it with Homebrew bash.
+One difference from the other projects: the Mac `.venv` is Python 3.12 and the
+ARC env is 3.11 (the spec's version). The code runs on both, and the tests pass
+on 3.12 locally.

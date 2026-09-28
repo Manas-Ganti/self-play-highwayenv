@@ -116,5 +116,13 @@ the runbook. No training has run yet.
 
 ## Protocol amendments
 
-*(None yet. `configs/reward.yaml` has not been frozen — that happens at the Phase 1
+- **2026-09-28: compute platform is OWL CPU-only (amends §1).** §1 assumed one
+  A100 with the policy on GPU. Only one partition's resources are available, and
+  env stepping dominates the wall time, so every run uses OWL `normal_q` CPU
+  nodes with the policy on CPU. **No effect on validity:** PPO and GRPO run on
+  identical hardware and devices, and step budgets are counted in env steps, not
+  wall time. Max 96 cores per job; a GRPO condition (5 × 33 cores) runs as two
+  jobs split by seed (`launch_condition.sh <algo> <n> <steps> <first_seed>`).
+
+*(Reward: none yet. `configs/reward.yaml` has not been frozen — that happens at the Phase 1
 gate. Any change to it after that point must be recorded here.)*

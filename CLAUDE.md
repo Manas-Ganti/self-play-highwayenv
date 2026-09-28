@@ -24,14 +24,14 @@ Negative results are results. If GRPO fails, the deliverable pivots to diagnosin
 
 ## 1. Hardware & Execution Model
 
-Target machine: VT ARC. Either a CPU-only OWL node (96 Genoa cores at 3.8 GHz, the expected best fit for this CPU-bound workload) or one GPU per job (A100 or H200 on Tinkercliffs, L40S on Falcon) plus a multi-core CPU allocation. The Phase 0 re-profile on both decides which. All submission goes through `arc/submit.sh`; `arc/README.md` is the operational runbook. Nothing here is multi-GPU.
+Target machine: VT ARC **OWL CPU nodes** (`normal_q`: 96 Genoa cores at 3.8 GHz, 768 GB per node). Only one partition's resources are available, and this workload is CPU-bound, so no GPU is used (protocol amendment 2026-09-28 in `report/log.md`). Max 96 cores per job; a condition needing more is split across jobs by seed. All submission goes through `arc/submit.sh`; `arc/README.md` is the operational runbook. Nothing here is multi-GPU.
 
 **Critical performance fact:** highway-env stepping is pure-Python and CPU-bound. The policy networks are small MLPs. The A100 is therefore *not* the bottleneck — CPU env throughput is. Exploit the GPU by running **many training runs concurrently**, not by making one run faster:
 
 - Use `AsyncVectorEnv` (Gymnasium) or SB3 `SubprocVecEnv` with 16–32 parallel envs per run, tuned to available cores.
 - Run all 5 seeds of a condition as concurrent processes sharing one GPU (each uses a sliver of GPU memory; small MLPs coexist trivially). `scripts/launch_condition.sh` spawns them on the job's GPU with disjoint CPU affinity drawn from the SLURM allocation; on ARC it runs inside `arc/condition.slurm`. Size `--cpus` at ~`n_envs + 1` per concurrent run.
 - The HP search runs one trial per SLURM array task (`arc/search.slurm`); trials are pre-sampled from the pre-registered seed, so the array and a sequential loop search identical configs.
-- Pin `torch` tensor ops to GPU; keep env stepping on CPU workers. Profile once in Phase 1 and record steps/sec in `report/throughput.md`.
+- Policy tensor ops run on CPU (`device: auto` with no GPU allocated); env stepping on CPU workers. Profile on OWL and record steps/sec in `report/throughput_owl.md`.
 
 Budgets (upgraded for this hardware):
 - 2M env steps per solo run (pilot decides whether curves plateau; extend to 3M only if not).
