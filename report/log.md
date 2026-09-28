@@ -92,11 +92,34 @@ the runbook. No training has run yet.
   OWL uses partition `normal_q`, and jobs default to QOS `owl_normal_base`.
   `owl_normal_short` has UsageFactor 2, so it bills double (see `arc/README.md`).
 
+## 2026-09-28 — OWL throughput profile (Phase 0 re-profile)
+
+OWL job 968475, node owl017, 32 cores, CPU policy. Full table in
+`report/throughput_owl.md`.
+
+| envs | steps/s | vs 1 env |
+|---:|---:|---:|
+| 1 | 173 | 1.0× |
+| 8 | 980 | 5.7× |
+| 16 | 1,082 | 6.2× |
+| 32 | 1,621 | 9.4× |
+
+- One OWL core is about 1.6× faster than the laptop (173 vs 109 steps/s), and the
+  16-env rate is about 2.8× the laptop's.
+- Scaling flattens after 8 envs, and the job still had spare cores, so the limit
+  is the main process (policy forward plus waiting on the slowest env each step),
+  not the core count. `n_envs` is not changed, because it sets the rollout batch
+  shape and is an algorithm setting. Revisit only if wall time becomes a problem.
+- Estimate: a 2M-step PPO run takes about 1 h (31 min collection, about 12 min
+  periodic eval, plus updates). `arc/README.md` sizes jobs at about 3–4× that.
+- The report's `cpu cores: 96` line was wrong: it showed the node total, not the
+  job's 32. `profile_env.py` now reports the allocation.
+
 ---
 
 ## Phase status
 
-- [x] **Phase 0 — Scaffold.** Repo at §6 layout; 61 tests green; throughput
+- [x] **Phase 0 — Scaffold.** (Re-profiled on OWL 2026-09-28; see above.) Repo at §6 layout; 61 tests green; throughput
       profiled (`report/throughput.md`).
       *Gate: PASSED* — `pytest` green on collector determinism + advantage math;
       `scripts/profile_env.py` reports ~390 steps/s (8 envs, 8-core laptop).

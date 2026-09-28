@@ -98,38 +98,52 @@ go **after** the `.slurm` file as argparse flags, where a typo fails loudly.
 ```bash
 PY=~/miniconda3/envs/racing-grpo/bin/python
 
-# Phase 0 follow-up: re-profile on OWL (log.md asks for this). Sets every --cpus below.
+# Phase 0 follow-up: profile on OWL. DONE 2026-09-28 (job 968475) -> report/throughput_owl.md
 arc/submit.sh --cpus 32 --time 00:30:00 arc/job.slurm scripts/profile_env.py \
     --device cpu --env-counts 1 8 16 32 --out report/throughput_owl.md
 
 # Phase 1: SB3 pilot. Gate: lap rate >= 0.90 (printed as "PHASE 1 GATE ...")
-arc/submit.sh --cpus 20 --time 08:00:00 arc/job.slurm scripts/sb3_pilot.py
+arc/submit.sh --cpus 17 --time 03:00:00 arc/job.slurm scripts/sb3_pilot.py
 #   -> results/phase1/sb3_ppo_seed0/solo_eval.json ; then freeze configs/reward.yaml
 
 # Phase 2: custom PPO parity. 3 seeds each; SB3 seeds via --seed
-arc/submit.sh --cpus 54 --time 08:00:00 arc/condition.slurm ppo 3 2000000
-for s in 0 1 2; do arc/submit.sh --cpus 20 --time 08:00:00 arc/job.slurm scripts/sb3_pilot.py --seed $s; done
+arc/submit.sh --cpus 51 --time 04:00:00 arc/condition.slurm ppo 3 2000000
+for s in 0 1 2; do arc/submit.sh --cpus 17 --time 03:00:00 arc/job.slurm scripts/sb3_pilot.py --seed $s; done
 
 # Phase 3: matched HP search. One trial per array task, same indices for both.
 # GRPO trials run up to 64 envs (n_groups=8), hence the larger request.
-arc/submit.sh --array 0-29 --cpus 18 --time 03:00:00 arc/search.slurm ppo
-arc/submit.sh --array 0-29 --cpus 65 --time 03:00:00 arc/search.slurm grpo
+arc/submit.sh --array 0-29 --cpus 17 --time 01:30:00 arc/search.slurm ppo
+arc/submit.sh --array 0-29 --cpus 65 --time 01:30:00 arc/search.slurm grpo
 $PY scripts/hp_search.py --algo ppo --collect && $PY scripts/hp_search.py --algo grpo --collect
 
 # Phase 4: 5 seeds x {PPO, GRPO}. PPO fits one node; GRPO is split across two jobs.
-arc/submit.sh --cpus 90 --time 12:00:00 arc/condition.slurm ppo
-arc/submit.sh --cpus 96 --time 12:00:00 arc/condition.slurm grpo 3 2000000 0
-arc/submit.sh --cpus 64 --time 12:00:00 arc/condition.slurm grpo 2 2000000 3
+arc/submit.sh --cpus 85 --time 04:00:00 arc/condition.slurm ppo
+arc/submit.sh --cpus 96 --time 04:00:00 arc/condition.slurm grpo 3 2000000 0
+arc/submit.sh --cpus 66 --time 04:00:00 arc/condition.slurm grpo 2 2000000 3
 
 # Phase 5: head-to-head round robin
 arc/submit.sh --cpus 32 --time 12:00:00 arc/job.slurm scripts/evaluate_h2h.py --results results/
 ```
 
-The `--cpus` and `--time` values above are **estimates** from the laptop profile
-(~390 steps/s at 8 cores). Replace them with the ARC profile numbers. Rules of
-thumb:
+**Sizing basis** (`report/throughput_owl.md`, OWL job 968475, 32 cores):
 
-- Give a run about `n_envs + 1` cores. PPO uses 16 envs. GRPO uses
+| envs | steps/s | vs 1 env |
+|---:|---:|---:|
+| 1 | 173 | 1.0× |
+| 8 | 980 | 5.7× |
+| 16 | 1,082 | 6.2× |
+| 32 | 1,621 | 9.4× |
+
+That puts a 2M-step PPO run (16 envs) at about 31 min of collection. Periodic
+eval adds about 12 min (20 episodes every 100k steps, on a single env at ~173
+steps/s), and updates add a few more, so about 1 h in total. The `--time` values
+above are about 3–4× that. **Scaling flattens after 8 envs** (8 → 16 is +10%
+with cores to spare). The bottleneck is the main process, which runs the policy
+and waits on the slowest env each step, not the core count. `n_envs` stays as
+configured because it is an algorithm setting; the core counts below are
+conservative. Rules of thumb:
+
+- Give a run `n_envs + 1` cores. PPO uses 16 envs. GRPO uses
   `group_size × n_groups`, which is 32 at the defaults and up to 64 in the search.
 - `condition.slurm` splits the job's cores evenly across seeds. It uses the job's
   real allocation (`sched_getaffinity`), not the node's core count.

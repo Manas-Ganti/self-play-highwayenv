@@ -62,8 +62,11 @@ def main() -> None:
     args = parser.parse_args()
 
     device = resolve_device(args.device)
-    cores = os.cpu_count() or 1
-    print(f"device={device}  cpu_cores={cores}")
+    # Cores this process may use: under SLURM that is the job's allocation, not
+    # the node's os.cpu_count() (96 on an OWL node regardless of --cpus).
+    cores = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1
+    node = os.environ.get("SLURMD_NODENAME", "local")
+    print(f"device={device}  cpu_cores={cores} (allocated)  node={node}")
 
     rows = []
     for n_envs in args.env_counts:
@@ -78,7 +81,8 @@ def main() -> None:
         "# Environment throughput",
         "",
         f"- device: `{device}`",
-        f"- cpu cores: {cores}",
+        f"- cpu cores: {cores} (allocated to this process)",
+        f"- node: {node}",
         f"- torch: {torch.__version__}",
         f"- measured: {time.strftime('%Y-%m-%d %H:%M')}",
         "",
@@ -94,15 +98,15 @@ def main() -> None:
     lines += [
         "",
         f"**Best: {best_envs} envs at {best_sps:,.0f} steps/sec** "
-        f"-> a 2M-step run takes ~{hours_2m:.1f} h.",
+        f"-> 2M steps of *collection alone* take ~{hours_2m:.1f} h. A real run also pays",
+        "for periodic eval (single env) and policy updates; see `arc/README.md` for sizing.",
         "",
         "## Reading this",
         "",
-        "Env stepping is CPU-bound pure Python; the policy MLP barely touches the GPU.",
-        "So the way to exploit an A100 is to run many seeds *concurrently* (each takes a",
-        "sliver of GPU memory) rather than to make one run faster. Scale n_envs per run",
-        "until the speedup curve flattens, then spend the remaining cores on more",
-        "concurrent runs -- see `scripts/launch_condition.sh`.",
+        "Env stepping is CPU-bound pure Python and the policy is a small MLP, so the",
+        "resource being rationed is CPU cores, not accelerators. Once the speedup curve",
+        "flattens, more envs per run stop paying; spend the remaining cores on more",
+        "concurrent runs instead -- see `scripts/launch_condition.sh`.",
         "",
     ]
     args.out.parent.mkdir(parents=True, exist_ok=True)
