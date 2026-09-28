@@ -59,8 +59,8 @@ arc/setup_env.sh              # ~/miniconda3/envs/racing-grpo, python 3.11, torc
 # 3. Identity, outside the repo
 mkdir -p ~/.config/racing-grpo
 cat > ~/.config/racing-grpo/arc.env <<'EOF'
-RG_ACCOUNT=<gpu slurm account>        # either ECE account works
-RG_CPU_ACCOUNT=<cpu allocation>       # used for --gpu owl; falls back to RG_ACCOUNT
+RG_ACCOUNT=<gpu allocation>           # Tinkercliffs (A100/H200) + Falcon (L40S)
+RG_CPU_ACCOUNT=<owl cpu allocation>   # required for --gpu owl; GPU allocations can't run on OWL
 RG_MAIL_USER=<pid>@vt.edu
 RG_OWL_PARTITION=normal_q             # confirm in step 4
 EOF

@@ -23,9 +23,9 @@
 #
 # Account and mail address are read from ~/.config/racing-grpo/arc.env, never
 # from this public repo:
-#     RG_ACCOUNT=<slurm account>      # sacctmgr show assoc user=$USER format=account%30
+#     RG_ACCOUNT=<gpu allocation>     # Tinkercliffs / Falcon GPU jobs
 #     RG_MAIL_USER=<pid>@vt.edu
-#     RG_CPU_ACCOUNT=<cpu allocation>  # optional; OWL jobs use it instead of RG_ACCOUNT
+#     RG_CPU_ACCOUNT=<cpu allocation>  # OWL jobs; a GPU allocation cannot run there
 #     RG_OWL_PARTITION=normal_q        # optional; confirm with `sinfo -s` on owl1
 
 set -euo pipefail
@@ -38,6 +38,7 @@ ARRAY=""
 PART_OVERRIDE=""
 QOS_OVERRIDE=""
 DRY_RUN=0
+ACCOUNT=""   # set per cluster below; never inherited from the shell
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -65,7 +66,6 @@ cd "$REPO_ROOT"
 CONF="${RG_ARC_CONF:-$HOME/.config/racing-grpo/arc.env}"
 # shellcheck disable=SC1090
 [[ -f "$CONF" ]] && source "$CONF"
-: "${RG_ACCOUNT:?set RG_ACCOUNT in $CONF (see: sacctmgr show assoc user=\$USER format=account%30)}"
 
 # Wall time in hours, to pick the QOS: "short" is the highest priority on ARC and
 # caps at a full day, so everything under 24 h belongs there.
@@ -90,13 +90,18 @@ case "$GPU" in
     # `sacctmgr show qos format=name%28,priority,maxwall` on owl1 once, then set
     # RG_OWL_PARTITION (and pass --qos if short/base tiers exist there).
     PART="${RG_OWL_PARTITION:-normal_q}"; QOS=""; GRES=""
-    RG_ACCOUNT="${RG_CPU_ACCOUNT:-$RG_ACCOUNT}"
+    # OWL has CPU allocations only; the GPU account is not valid there, so there
+    # is deliberately no fallback to RG_ACCOUNT.
+    ACCOUNT="${RG_CPU_ACCOUNT:?--gpu owl needs RG_CPU_ACCOUNT (an OWL CPU allocation) in $CONF; on owl1: sacctmgr show assoc user=\$USER format=account%30}"
     if [[ "$(hostname)" != owl* ]]; then
       echo "warning: OWL jobs must be submitted from an OWL login node, not $(hostname)" >&2
     fi
     if (( CPUS > 96 )); then echo "OWL nodes have 96 cores; --cpus $CPUS cannot fit" >&2; exit 2; fi ;;
   *) echo "--gpu must be a100, h200, l40s or owl" >&2; exit 2 ;;
 esac
+if [[ -z "${ACCOUNT:-}" ]]; then
+  ACCOUNT="${RG_ACCOUNT:?GPU jobs need RG_ACCOUNT (a Tinkercliffs/Falcon GPU allocation) in $CONF}"
+fi
 [[ -n "$PART_OVERRIDE" ]] && PART="$PART_OVERRIDE"
 [[ -n "$QOS_OVERRIDE" ]] && QOS="$QOS_OVERRIDE"
 
@@ -105,7 +110,7 @@ esac
 MEM="${MEM:-$(( CPUS * 2 ))G}"
 
 ARGS=(
-  --account="$RG_ACCOUNT"
+  --account="$ACCOUNT"
   --partition="$PART"
   --cpus-per-task="$CPUS"
   --mem="$MEM"
