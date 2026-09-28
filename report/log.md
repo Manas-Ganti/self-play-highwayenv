@@ -89,7 +89,8 @@ the runbook. No training has run yet.
   No protocol amendment is needed because no search had run.
 - **OWL CPU nodes added** (`arc/submit.sh --gpu owl`). The workload is CPU-bound,
   so 3.8 GHz Genoa cores may beat any GPU node. The OWL-vs-A100 profile decides.
-  The OWL partition name is unconfirmed; see `arc/README.md`.
+  OWL uses partition `normal_q`, and jobs default to QOS `owl_normal_base`.
+  `owl_normal_short` has UsageFactor 2, so it bills double (see `arc/README.md`).
 
 ---
 

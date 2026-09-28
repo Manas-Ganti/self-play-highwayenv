@@ -26,7 +26,6 @@
 #     RG_ACCOUNT=<gpu allocation>     # Tinkercliffs / Falcon GPU jobs
 #     RG_MAIL_USER=<pid>@vt.edu
 #     RG_CPU_ACCOUNT=<cpu allocation>  # OWL jobs; a GPU allocation cannot run there
-#     RG_OWL_PARTITION=normal_q        # optional; confirm with `sinfo -s` on owl1
 
 set -euo pipefail
 
@@ -85,11 +84,15 @@ case "$GPU" in
       echo "warning: l40s lives on Falcon; submit from falcon1/falcon2, not $(hostname)" >&2
     fi ;;
   owl|cpu)
-    # OWL, CPU only: no gres. The partition and QOS names below are the ARC
-    # convention, not yet confirmed on OWL -- run `sinfo -s` and
-    # `sacctmgr show qos format=name%28,priority,maxwall` on owl1 once, then set
-    # RG_OWL_PARTITION (and pass --qos if short/base tiers exist there).
-    PART="${RG_OWL_PARTITION:-normal_q}"; QOS=""; GRES=""
+    # OWL, CPU only: no gres. QOS tiers on normal_q (sacctmgr, 2026-09-28):
+    #   owl_normal_short  prio 1500  1 day   UsageFactor 2  <- bills DOUBLE
+    #   owl_normal_base   prio 1000  7 days  UsageFactor 1
+    #   owl_normal_long   prio  500  14 days UsageFactor 1
+    # Unlike Tinkercliffs, "short" costs 2x allocation here, and these jobs hold
+    # dozens of cores for hours -- so default to base, and opt into short with
+    # --qos owl_normal_short only when queue time matters more than budget.
+    PART=normal_q; GRES=""
+    if (( HOURS >= 168 )); then QOS=owl_normal_long; else QOS=owl_normal_base; fi
     # OWL has CPU allocations only; the GPU account is not valid there, so there
     # is deliberately no fallback to RG_ACCOUNT.
     ACCOUNT="${RG_CPU_ACCOUNT:?--gpu owl needs RG_CPU_ACCOUNT (an OWL CPU allocation) in $CONF; on owl1: sacctmgr show assoc user=\$USER format=account%30}"

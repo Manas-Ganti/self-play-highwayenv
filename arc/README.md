@@ -62,19 +62,24 @@ cat > ~/.config/racing-grpo/arc.env <<'EOF'
 RG_ACCOUNT=<gpu allocation>           # Tinkercliffs (A100/H200) + Falcon (L40S)
 RG_CPU_ACCOUNT=<owl cpu allocation>   # required for --gpu owl; GPU allocations can't run on OWL
 RG_MAIL_USER=<pid>@vt.edu
-RG_OWL_PARTITION=normal_q             # confirm in step 4
 EOF
 
-# 4. Once, on an OWL login node: confirm partition + QOS names
-sinfo -s
-sacctmgr show qos format=name%28,priority,maxwall
 ```
 
-> The OWL partition name (`normal_q`) follows the ARC convention but **has not
-> been confirmed on OWL**, and `submit.sh` passes no OWL QOS. If `sacctmgr` lists
-> short/base tiers there, pass `--qos <name>` or set `RG_OWL_PARTITION`. The
-> first OWL submit will show whether this is right; a wrong name is rejected at
-> submit time, so it costs no queue wait.
+**OWL QOS** (partition `normal_q`, confirmed 2026-09-28):
+
+| QOS | priority | max wall | UsageFactor |
+|---|---|---|---|
+| `owl_normal_short` | 1500 | 1 day | **2** (bills double) |
+| `owl_normal_base` | 1000 | 7 days | 1 |
+| `owl_normal_long` | 500 | 14 days | 1 |
+
+`submit.sh --gpu owl` defaults to **`owl_normal_base`**, or `long` past 7 days.
+On Tinkercliffs, "short" is simply the best tier. On OWL it costs twice the
+allocation, and these jobs hold dozens of cores for hours. Pass
+`--qos owl_normal_short` only when getting the job started sooner is worth
+double the cost. `preemptable_q` is free (UsageFactor 0), but it can evict a job,
+and `train.py` cannot resume yet, so it is not used.
 
 W&B reads `WANDB_API_KEY` from `~/.config/vrr/secrets.env`, the same file the
 other projects use (override it with `SECRETS_ENV=`). If no key is set, the run
