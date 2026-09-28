@@ -15,9 +15,20 @@ lambda_progress: 1.0
 lambda_speed: 0.1
 target_speed: 10.0          # m/s; matches the racetrack speed limit
 
-# Terminal penalties.
-collision_penalty: 5.0      # ~= 5 s of perfect driving; crashing must not pay
-offtrack_penalty: 0.5       # leaving the track ends the episode (forfeits future reward)
+# Terminal penalties. Revised 2026-09-28 after pilot #2 (was 5.0 / 0.5): with
+# a 5-point crash cost and no finish reward, driving ~16.6 m/s through 6-9 m/s
+# traffic and crashing 30% of the time was near-optimal (see report/log.md).
+# Both failures end the episode, so they cost the same. 20 is 4x stiffer but kept
+# BELOW the ~32 points earned reaching the first corner (~65 m): early in
+# training nearly every episode ends there, and a penalty above that would make
+# standing still (return 0) beat driving -- the local optimum lambda_speed exists
+# to prevent.
+collision_penalty: 20.0
+offtrack_penalty: 20.0
 
 action_cost: 0.0            # control-effort cost; off by default
-lap_bonus: 0.0              # progress term already integrates to this; off by default
+# Finishing is the objective the Phase 1 gate measures, so it is paid for
+# directly. A lap's progress sums to ~174 regardless of speed, and discounting
+# favours arriving sooner, so without this a late crash forfeited only the few
+# points left in the lap. At 100, any crash also forfeits the bonus. (Was 0.0.)
+lap_bonus: 100.0

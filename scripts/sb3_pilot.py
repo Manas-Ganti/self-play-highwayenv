@@ -148,6 +148,11 @@ def main() -> None:
             "use_wandb": cfg.use_wandb and not args.no_wandb,
         }
     )
+    finished = Path(cfg.results_dir) / cfg.name / "solo_eval.json"
+    if finished.exists():
+        # Env/reward iteration reuses seeds, so default names collide across pilots.
+        # Overwriting would silently destroy the earlier pilot's evidence.
+        raise SystemExit(f"{finished} already exists -- pass --name (e.g. phase1/p3_occupancy_seed0)")
     set_seed(cfg.seed)
     device = resolve_device(cfg.device)
 

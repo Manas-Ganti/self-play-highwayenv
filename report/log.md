@@ -162,6 +162,40 @@ config (kinematics). If the gate passes on occupancy, it must read the run's
 `config.json` the way `record_solo.py` does, or h2h will feed occupancy-trained
 policies the wrong observation.
 
+## 2026-09-28 — Phase 1 pilots #2a/#2b: FAILED, but occupancy fixed steering
+
+SB3 PPO, 2M steps, `obs_type: occupancy`, two seeds, reward unchanged from #1.
+W&B runs `1t62mcey` (seed 0) and `zykjm5kt` (seed 1).
+
+| final eval (50 ep) | kinematics #1 | occupancy s0 | occupancy s1 | IDM floor |
+|---|---|---|---|---|
+| lap completion | 0.00 | 0.48 | 0.72 | **0.98** (49/50) |
+| collision | 0.02 | 0.30 | 0.26 | 0.02 |
+| off-track | 0.98 | 0.22 | 0.04 | 0.00 |
+
+The IDM floor was run locally on the same 50 eval seeds (10000–10049) with
+highway-env 1.11. ARC has 1.12.1, so treat it as indicative. Its one crash was
+into a vehicle ahead at 5 m/s.
+
+**Reading.** The occupancy observation fixed the problem: the policy now takes
+corners (pilot #1 took none). The remaining failure is collisions, and the IDM
+result shows they are avoidable (90% is reachable). The policy drives about 16.6
+m/s (seed 0 final eval) through traffic at 6–9 m/s.
+
+**Cause: the reward made that trade correct.** A lap's progress sums to about
+174 whatever the speed (348 m / (10 m/s × 0.2 s)). The crash penalty was 5, there
+was no finish reward, and γ = 0.99 discounting favours reaching reward sooner.
+A crash at 290 m forfeited only ~34 points, while speed raised the value of every
+point. The eval curves oscillated with no trend (lap rate 0.3–0.8 across
+training evals), consistent with a weak, noisy signal about crashing.
+
+**Change (pre-freeze reward iteration, within §5 Phase 1):**
+`collision_penalty` 5 → 20, `offtrack_penalty` 0.5 → 20, `lap_bonus` 0 → 100.
+The rationale is in `configs/reward.yaml`. The penalties stay below the ~32
+points earned reaching the first corner, so "stand still" never beats driving
+early in training. PPO and GRPO both read this one file, so the comparison stays
+symmetric. Next: pilot #3, occupancy, same two seeds.
+
 ---
 
 ## Phase status
@@ -171,8 +205,8 @@ policies the wrong observation.
       *Gate: PASSED* — `pytest` green on collector determinism + advantage math;
       `scripts/profile_env.py` reports ~390 steps/s (8 envs, 8-core laptop).
       Re-profile on the ARC node type before Phase 4 (`arc/README.md`).
-- [ ] **Phase 1 — Env validation via SB3 PPO pilot.** Pilot #1 (kinematics
-      obs) FAILED 0.00 lap rate; pilot #2 (occupancy obs) pending.
+- [ ] **Phase 1 — Env validation via SB3 PPO pilot.** Pilot #1 (kinematics)
+      0.00; #2 (occupancy) 0.48 / 0.72; #3 (occupancy + revised reward) pending.
       *Gate:* ≥90% of eval episodes complete a lap without collision within 2M steps.
       **`configs/reward.yaml` is provisional until this gate passes, then frozen.**
 - [ ] **Phase 2 — Custom PPO parity vs SB3.** Not started. Do not build GRPO until
