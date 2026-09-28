@@ -23,9 +23,8 @@
 #
 # Account and mail address are read from ~/.config/racing-grpo/arc.env, never
 # from this public repo:
-#     RG_ACCOUNT=<gpu allocation>     # Tinkercliffs / Falcon GPU jobs
+#     RG_ACCOUNT=<slurm account>      # one account for every partition (CPU and GPU)
 #     RG_MAIL_USER=<pid>@vt.edu
-#     RG_CPU_ACCOUNT=<cpu allocation>  # OWL jobs; a GPU allocation cannot run there
 
 set -euo pipefail
 
@@ -37,7 +36,6 @@ ARRAY=""
 PART_OVERRIDE=""
 QOS_OVERRIDE=""
 DRY_RUN=0
-ACCOUNT=""   # set per cluster below; never inherited from the shell
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -93,18 +91,14 @@ case "$GPU" in
     # --qos owl_normal_short only when queue time matters more than budget.
     PART=normal_q; GRES=""
     if (( HOURS >= 168 )); then QOS=owl_normal_long; else QOS=owl_normal_base; fi
-    # OWL has CPU allocations only; the GPU account is not valid there, so there
-    # is deliberately no fallback to RG_ACCOUNT.
-    ACCOUNT="${RG_CPU_ACCOUNT:?--gpu owl needs RG_CPU_ACCOUNT (an OWL CPU allocation) in $CONF; on owl1: sacctmgr show assoc user=\$USER format=account%30}"
     if [[ "$(hostname)" != owl* ]]; then
       echo "warning: OWL jobs must be submitted from an OWL login node, not $(hostname)" >&2
     fi
     if (( CPUS > 96 )); then echo "OWL nodes have 96 cores; --cpus $CPUS cannot fit" >&2; exit 2; fi ;;
   *) echo "--gpu must be a100, h200, l40s or owl" >&2; exit 2 ;;
 esac
-if [[ -z "${ACCOUNT:-}" ]]; then
-  ACCOUNT="${RG_ACCOUNT:?GPU jobs need RG_ACCOUNT (a Tinkercliffs/Falcon GPU allocation) in $CONF}"
-fi
+# One account covers every partition, CPU and GPU alike.
+ACCOUNT="${RG_ACCOUNT:?set RG_ACCOUNT in $CONF}"
 [[ -n "$PART_OVERRIDE" ]] && PART="$PART_OVERRIDE"
 [[ -n "$QOS_OVERRIDE" ]] && QOS="$QOS_OVERRIDE"
 

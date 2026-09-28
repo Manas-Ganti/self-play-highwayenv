@@ -1,7 +1,7 @@
 # Running on VT ARC
 
 How this project runs on VT ARC. **Platform: OWL CPU nodes** (`normal_q`,
-the CPU allocation). Only one partition's resources can be used, and this
+the project account). Only one partition's resources can be used, and this
 project's work is CPU work, so everything runs there.
 It is distilled from the runbooks of two earlier projects on the same cluster. Every
 rule below cost one of them at least one wasted allocation. Account names and mail
@@ -52,8 +52,7 @@ arc/setup_env.sh              # ~/miniconda3/envs/racing-grpo, python 3.11, torc
 # 3. Identity, outside the repo
 mkdir -p ~/.config/racing-grpo
 cat > ~/.config/racing-grpo/arc.env <<'EOF'
-RG_CPU_ACCOUNT=<owl cpu allocation>   # every job (OWL is the platform)
-RG_ACCOUNT=<gpu allocation>           # only if the project ever moves to a GPU partition
+RG_ACCOUNT=<slurm account>            # one account for every partition, CPU and GPU
 RG_MAIL_USER=<pid>@vt.edu
 EOF
 
