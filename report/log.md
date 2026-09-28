@@ -149,6 +149,19 @@ now run for both observation families. Env iteration before the gate is within
 protocol (§5 Phase 1: "simplify... and re-run"). Neither algorithm has trained
 yet, so this is not a protocol amendment. The reward is unchanged.
 
+### Watching episodes
+
+`analysis/record_solo.py --run <run dir>` replays a run on its own eval seeds and
+writes stamped mp4s, uploading them to W&B with `--wandb`. `--policy straight`
+replays the zero-steer reference on the same seeds. Rendering fails silently
+(black frames, no error) under SDL's `dummy` driver on macOS, so the recorder
+uses `dummy` only on Linux and refuses to write all-black frames.
+
+Open item: `analysis/video.py` (Phase 5 h2h) builds its env from the *default*
+config (kinematics). If the gate passes on occupancy, it must read the run's
+`config.json` the way `record_solo.py` does, or h2h will feed occupancy-trained
+policies the wrong observation.
+
 ---
 
 ## Phase status
