@@ -13,3 +13,14 @@ report/videos/
 
 # Local Claude Code settings
 .claude/settings.local.json
+
+# SLURM job logs (the directory itself is tracked: sbatch needs it to exist)
+logs/slurm/*
+!logs/slurm/.gitkeep
+
+# Cluster notes carried over from other projects. They name the SLURM account
+# and mail address, which must not land in this public repo. The project-specific,
+# identity-free version is arc/README.md.
+arc_quickref.md
+arc_runbook.md
+ISAAC_SIM_PLAYBOOK.md

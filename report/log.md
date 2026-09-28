@@ -60,6 +60,37 @@ history to recover them from). See `legacy/README.md` for what each one was.
   a time-limit cutoff bootstraps off `V(final_obs)` instead of being treated as a
   terminal state with value 0. Tested in `tests/test_advantages.py`.
 
+## 2026-09-28 — Moved execution to VT ARC; Phase 1 script added
+
+Training moves from "a single A100 server" to VT ARC (A100/H200 on Tinkercliffs,
+L40S on Falcon), one GPU per job. `arc/` holds the launchers; `arc/README.md` is
+the runbook. No training has run yet.
+
+- **`scripts/sb3_pilot.py` (new).** Phase 1 had no script. It runs SB3 PPO with the
+  custom PPO's hyperparameters mapped one-to-one, and scores the result with the
+  same `evaluate_solo` harness and eval seeds, so the Phase 2 parity comparison is
+  like-for-like. It prints and writes the gate verdict. A local 8k-step smoke run
+  confirmed the pipeline works end to end. That run was not a result, and its
+  output was deleted.
+- **`launch_condition.sh` core pinning.** The script read `os.cpu_count()`, which
+  under SLURM is the *node's* core count (128 on a DGX), not the job's allocation,
+  so `taskset` would have pinned runs to cores the job does not own. It now splits
+  `sched_getaffinity(0)` and inherits the job's `CUDA_VISIBLE_DEVICES`.
+- **HP search as a SLURM array.** `--trial-index i` runs one trial, and `--collect`
+  aggregates the results and writes the budget receipt. `--collect` refuses to run
+  while any trial is missing.
+- **Bug fixed in `hp_search.sample_trial` (before any search ran).** Shared and
+  algorithm-specific hyperparameters were drawn from one RNG stream. PPO makes 4
+  algorithm-specific draws per trial and GRPO makes 1, so from trial 1 onward the
+  two algorithms got *different* shared values. The docstring's "trial i is a
+  matched pair" was therefore false. The grid and trial count were still matched,
+  but the pairing was not. The two blocks now draw from separate streams, and
+  `tests/test_hp_search.py` asserts identical shared values on every trial.
+  No protocol amendment is needed because no search had run.
+- **OWL CPU nodes added** (`arc/submit.sh --gpu owl`). The workload is CPU-bound,
+  so 3.8 GHz Genoa cores may beat any GPU node. The OWL-vs-A100 profile decides.
+  The OWL partition name is unconfirmed; see `arc/README.md`.
+
 ---
 
 ## Phase status
@@ -68,8 +99,9 @@ history to recover them from). See `legacy/README.md` for what each one was.
       profiled (`report/throughput.md`).
       *Gate: PASSED* — `pytest` green on collector determinism + advantage math;
       `scripts/profile_env.py` reports ~390 steps/s (8 envs, 8-core laptop).
-      Re-profile on the A100 node before Phase 4.
-- [ ] **Phase 1 — Env validation via SB3 PPO pilot.** Not started.
+      Re-profile on the ARC node type before Phase 4 (`arc/README.md`).
+- [ ] **Phase 1 — Env validation via SB3 PPO pilot.** Script ready
+      (`scripts/sb3_pilot.py`); not yet run.
       *Gate:* ≥90% of eval episodes complete a lap without collision within 2M steps.
       **`configs/reward.yaml` is provisional until this gate passes, then frozen.**
 - [ ] **Phase 2 — Custom PPO parity vs SB3.** Not started. Do not build GRPO until

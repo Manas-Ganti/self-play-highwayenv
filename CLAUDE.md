@@ -24,12 +24,13 @@ Negative results are results. If GRPO fails, the deliverable pivots to diagnosin
 
 ## 1. Hardware & Execution Model
 
-Target machine: single-node server, 1× NVIDIA A100, multi-core CPU.
+Target machine: VT ARC. Either a CPU-only OWL node (96 Genoa cores at 3.8 GHz, the expected best fit for this CPU-bound workload) or one GPU per job (A100 or H200 on Tinkercliffs, L40S on Falcon) plus a multi-core CPU allocation. The Phase 0 re-profile on both decides which. All submission goes through `arc/submit.sh`; `arc/README.md` is the operational runbook. Nothing here is multi-GPU.
 
 **Critical performance fact:** highway-env stepping is pure-Python and CPU-bound. The policy networks are small MLPs. The A100 is therefore *not* the bottleneck — CPU env throughput is. Exploit the GPU by running **many training runs concurrently**, not by making one run faster:
 
 - Use `AsyncVectorEnv` (Gymnasium) or SB3 `SubprocVecEnv` with 16–32 parallel envs per run, tuned to available cores.
-- Run all 5 seeds of a condition as concurrent processes sharing the A100 (each uses a sliver of GPU memory; small MLPs coexist trivially). Provide a launcher script (`scripts/launch_condition.sh`) that spawns seeds with `CUDA_VISIBLE_DEVICES=0` and distinct CPU affinity if core count allows.
+- Run all 5 seeds of a condition as concurrent processes sharing one GPU (each uses a sliver of GPU memory; small MLPs coexist trivially). `scripts/launch_condition.sh` spawns them on the job's GPU with disjoint CPU affinity drawn from the SLURM allocation; on ARC it runs inside `arc/condition.slurm`. Size `--cpus` at ~`n_envs + 1` per concurrent run.
+- The HP search runs one trial per SLURM array task (`arc/search.slurm`); trials are pre-sampled from the pre-registered seed, so the array and a sequential loop search identical configs.
 - Pin `torch` tensor ops to GPU; keep env stepping on CPU workers. Profile once in Phase 1 and record steps/sec in `report/throughput.md`.
 
 Budgets (upgraded for this hardware):
@@ -132,8 +133,10 @@ racing-grpo/
 │   ├── ppo.py
 │   └── grpo.py
 ├── configs/                   # reward.yaml, search_space.yaml, one YAML per condition/seed
+├── arc/                       # VT ARC: submit.sh, arc_env.sh, *.slurm, setup_env.sh, README.md
 ├── scripts/
 │   ├── profile_env.py
+│   ├── sb3_pilot.py           # Phase 1 gate: SB3 PPO env validation
 │   ├── train.py               # entry: python scripts/train.py --config configs/ppo_seed0.yaml
 │   ├── launch_condition.sh    # spawn all seeds concurrently
 │   └── evaluate_h2h.py

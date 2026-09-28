@@ -32,8 +32,11 @@ conda create -n racing-grpo python=3.11 -y && conda activate racing-grpo
 pip install torch --index-url https://download.pytorch.org/whl/cu121   # A100 node
 pip install -r requirements.txt
 
-pytest                                          # 61 tests
+pytest                                          # 67 tests
 python scripts/profile_env.py                   # -> report/throughput.md
+
+# Phase 1 gate: SB3 PPO pilot (>= 90% lap completion)
+python scripts/sb3_pilot.py
 
 # Train one run (W&B if WANDB_API_KEY is set, else TensorBoard)
 python scripts/train.py --config configs/ppo_seed0.yaml
@@ -43,7 +46,7 @@ python scripts/train.py --config configs/grpo_seed0.yaml
 ./scripts/launch_condition.sh ppo
 ./scripts/launch_condition.sh grpo
 
-# Matched-budget hyperparameter search (Phase 3)
+# Matched-budget hyperparameter search (Phase 3); on ARC, one trial per array task
 python scripts/hp_search.py --algo ppo
 python scripts/hp_search.py --algo grpo
 
@@ -54,6 +57,10 @@ python analysis/video.py --a results/ppo_seed0 --b results/grpo_seed0 --n 20
 # Figures + hypothesis verdicts (Phase 6)
 python analysis/plots.py --results results/
 ```
+
+**On VT ARC** (A100 / H200 / L40S): see [`arc/README.md`](arc/README.md). Every
+job goes through `arc/submit.sh`, e.g.
+`arc/submit.sh --cpus 96 --time 12:00:00 arc/condition.slurm ppo`.
 
 ## Architecture
 
@@ -103,7 +110,9 @@ Anything else that differed between them would be a confound.
 
 ## Status
 
-Phase 0 complete (scaffold, tests, throughput profile). Phases 1–7 not started —
+Phase 0 complete (scaffold, tests, throughput profile). ARC launchers and the
+Phase 1 SB3 pilot script are in place; no training run has happened yet, so
+there are **no results**. Phases 1–7 not started —
 `report/log.md` has the gate checklist and the design decisions worth arguing with.
 
 `legacy/` holds the archived prior project ("Competitive Self-Play Racetrack RL", a

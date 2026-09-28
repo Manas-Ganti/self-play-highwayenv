@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Launch all seeds of one condition concurrently on a single A100 node.
+# Launch all seeds of one condition concurrently on a single GPU node.
+# On VT ARC, run it inside a job: arc/submit.sh ... arc/condition.slurm <algo>
 #
 #   ./scripts/launch_condition.sh ppo            # seeds 0-4, 2M steps each
 #   ./scripts/launch_condition.sh grpo 5 2000000
@@ -22,10 +23,19 @@ cd "$REPO_ROOT"
 LOG_DIR="results/launch_logs"
 mkdir -p "$LOG_DIR"
 
-CORES="$(python -c 'import os; print(os.cpu_count() or 1)')"
-# Each run owns a contiguous slice of cores; its vector-env workers live there.
-# Without this the runs' worker pools fight over the same cores and every run
-# slows down together.
+PY="${PY:-python}"
+
+# The cores this process may actually use. Under SLURM that is the job's
+# allocation, NOT os.cpu_count(): on a shared 128-core ARC node cpu_count() is
+# 128 while the job may own 32 arbitrary cores, and pinning to "0-31" would land
+# on cores the job does not hold (taskset fails, or every run piles onto one).
+ALLOWED=($("$PY" -c 'import os
+cores = sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else range(os.cpu_count() or 1)
+print(" ".join(map(str, cores)))'))
+CORES=${#ALLOWED[@]}
+# Each run owns a disjoint slice of those cores; its vector-env workers live
+# there. Without this the runs' worker pools fight over the same cores and every
+# run slows down together.
 CORES_PER_RUN=$(( CORES / N_SEEDS ))
 if (( CORES_PER_RUN < 1 )); then CORES_PER_RUN=1; fi
 
@@ -39,19 +49,23 @@ for (( SEED=0; SEED<N_SEEDS; SEED++ )); do
 
   LOG="${LOG_DIR}/${ALGO}_seed${SEED}.log"
   START=$(( SEED * CORES_PER_RUN ))
-  END=$(( START + CORES_PER_RUN - 1 ))
+  CPU_LIST="$(IFS=,; echo "${ALLOWED[*]:START:CORES_PER_RUN}")"
 
-  CMD=(python scripts/train.py --config "$CONFIG" --seed "$SEED" --total-steps "$TOTAL_STEPS")
+  CMD=("$PY" scripts/train.py --config "$CONFIG" --seed "$SEED" --total-steps "$TOTAL_STEPS")
 
-  # Pin CPU affinity when taskset is available (Linux); the A100 is shared by all.
-  if command -v taskset >/dev/null 2>&1 && (( CORES_PER_RUN > 0 )); then
-    CUDA_VISIBLE_DEVICES=0 taskset -c "${START}-${END}" "${CMD[@]}" > "$LOG" 2>&1 &
+  # Pin CPU affinity when taskset is available (Linux) and every run gets its own
+  # cores. Under SLURM, CUDA_VISIBLE_DEVICES is already the one allocated GPU and
+  # is inherited as-is; outside SLURM default to GPU 0. All runs share it.
+  export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+  if command -v taskset >/dev/null 2>&1 && (( CORES >= N_SEEDS )); then
+    taskset -c "$CPU_LIST" "${CMD[@]}" > "$LOG" 2>&1 &
   else
-    CUDA_VISIBLE_DEVICES=0 "${CMD[@]}" > "$LOG" 2>&1 &
+    CPU_LIST="unpinned"
+    "${CMD[@]}" > "$LOG" 2>&1 &
   fi
 
   PIDS+=($!)
-  echo "  seed $SEED -> pid ${PIDS[-1]}, cores ${START}-${END}, log $LOG"
+  echo "  seed $SEED -> pid ${PIDS[-1]}, cores ${CPU_LIST}, log $LOG"
 done
 
 echo "waiting for ${#PIDS[@]} runs..."
