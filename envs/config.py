@@ -83,6 +83,9 @@ class EnvConfig(BaseModel):
         grid, so runs saved before these fields existed replay unchanged. The
         forward extent is the policy's look-ahead: at speed v it must cover the
         stopping distance to slower traffic (pilot #3, report/log.md).
+    speed_range : (min, max) m/s for the *controlled* car(s), or None for
+        highway-env's default of (-40, 40), which also allows reversing. Traffic
+        is unaffected. Both h2h agents share the same cap.
     laps_to_finish : int
         Laps that constitute a finished race.
     duration : int
@@ -100,6 +103,7 @@ class EnvConfig(BaseModel):
     grid_x: tuple[float, float] = (-18.0, 18.0)
     grid_y: tuple[float, float] = (-18.0, 18.0)
     grid_step: float = Field(default=3.0, gt=0)
+    speed_range: tuple[float, float] | None = None
 
     laps_to_finish: int = Field(default=1, ge=1)
     duration: int = Field(default=60, ge=1)
@@ -138,6 +142,8 @@ class EnvConfig(BaseModel):
             "lateral": True,
             "target_speeds": [0, 5, 10],
         }
+        if self.speed_range is not None:
+            action["speed_range"] = list(self.speed_range)
         if self.obs_type is ObsType.KINEMATICS:
             observation: dict[str, Any] = {
                 "type": "Kinematics",

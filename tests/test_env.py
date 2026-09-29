@@ -275,3 +275,23 @@ class TestRendering:
         env.close()
         assert frame.ndim == 3 and frame.shape[2] == 3
         assert frame.max() > 0, "all-black frame: the renderer drew nothing"
+
+
+class TestSpeedRange:
+    def test_full_throttle_never_exceeds_the_cap_and_never_reverses(self, cfg):
+        capped = cfg.model_copy(update={"speed_range": (0.0, 12.0)})
+        env = make_solo_env(capped)
+        env.reset(seed=0)
+        speeds = []
+        for throttle in [1.0] * 25 + [-1.0] * 25:
+            _, _, term, trunc, info = env.step(np.array([throttle, 0.0]))
+            speeds.append(info["speed"])
+            if term or trunc:
+                break
+        env.close()
+        assert max(speeds) <= 12.0 + 1e-6
+        assert min(speeds) >= -1e-6
+
+    def test_default_is_uncapped_so_saved_runs_replay_unchanged(self, cfg):
+        assert cfg.speed_range is None
+        assert "speed_range" not in cfg.highway_config()["action"]

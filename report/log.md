@@ -274,6 +274,30 @@ There are two failure modes:
 
 Pilot #4 is still justified by mode 1 and runs as planned.
 
+## 2026-09-28 — Pilot #4 (wider grid): worse so far; next lever is a speed cap
+
+Pilot #4 seed 0 (grid −12…48 × ±30, 1600 inputs), training evals up to 1.1M
+steps: **lap rate 0.05–0.20, collisions 0.65–0.90**, off-track ≤ 0.15. Pilot #3
+at the same stage had lap rates of roughly 0.4–0.6. The wider view made
+collisions worse. A likely contributor is that 1600 mostly empty inputs are
+harder for a 64×64 MLP within 2M steps. That is unverified. Final results for
+both seeds are pending.
+
+**Next lever, pilot #5: cap the controlled car's speed at 12 m/s**
+(`speed_range: [0, 12]`) on the original ±18 m grid, with the reward unchanged
+from #3. The cap is the only difference from #3.
+- Every crash analysis traces back to closing speed, and nothing capped it:
+  the pilots reached 16–18 m/s, although `reward.yaml` treats 10 m/s as the track
+  speed limit. highway-env's default `speed_range` is (−40, 40), so reversing
+  was also possible.
+- With traffic at 6–9 m/s, the closing speed is at most ~6 m/s, so the stopping
+  gap is ~10 m (6²/10 + 1.2 + 5). The ±18 m grid shows traffic from ~17 m, so
+  its field of view is sufficient. The cap leaves 3–6 m/s of room to overtake,
+  so racing and the h2h comparison stay meaningful, and both h2h agents share it.
+- This is the §5 Phase 1 "simplify and re-run" step. `EnvConfig.speed_range`
+  defaults to None, so saved runs replay unchanged. `tests/test_env.py::
+  TestSpeedRange` checks that full throttle cannot exceed the cap or reverse.
+
 ---
 
 ## Phase status
@@ -284,7 +308,7 @@ Pilot #4 is still justified by mode 1 and runs as planned.
       `scripts/profile_env.py` reports ~390 steps/s (8 envs, 8-core laptop).
       Re-profile on the ARC node type before Phase 4 (`arc/README.md`).
 - [ ] **Phase 1 — Env validation via SB3 PPO pilot.** Pilot #1 (kinematics)
-      0.00; #2 (occupancy) 0.48 / 0.72; #3 (+ revised reward) 0.58 / 0.60; #4 (wider grid) pending.
+      0.00; #2 (occupancy) 0.48 / 0.72; #3 (+ revised reward) 0.58 / 0.60; #4 (wider grid) worse mid-run; #5 (12 m/s speed cap) next.
       *Gate:* ≥90% of eval episodes complete a lap without collision within 2M steps.
       **`configs/reward.yaml` is provisional until this gate passes, then frozen.**
 - [ ] **Phase 2 — Custom PPO parity vs SB3.** Not started. Do not build GRPO until
