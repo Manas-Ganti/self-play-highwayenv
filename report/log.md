@@ -298,6 +298,25 @@ from #3. The cap is the only difference from #3.
   defaults to None, so saved runs replay unchanged. `tests/test_env.py::
   TestSpeedRange` checks that full throttle cannot exceed the cap or reverse.
 
+## 2026-09-28 — Reference ceiling on ARC: IDM floor laps 49/50
+
+Run on ARC (owl2, highway-env 1.12.1), occupancy env, eval seeds 10000–10049,
+scripted `IDMPolicy`:
+
+| agent speed cap | lap | crash |
+|---|---|---|
+| none | 49 | 1 |
+| 12 m/s | 49 | 1 |
+
+This confirms the local 1.11 result. A careful driver completes 98% of the
+exact episodes the gate scores, so the environment does not force crashes, and
+the 0.9 gate sits below a demonstrated reference. The cap does not reduce the
+reference (IDM targets ~9 m/s). Caveats: IDM reads the simulator directly (full
+information) and never overtakes. The learned agent sees only its grid and
+chooses risky overtakes because the reward pays for speed. Of the pilot #3
+seed 1 crashes, only 1/18 was traffic hitting the agent from behind, so the
+unavoidable-crash floor is a few percent.
+
 ---
 
 ## Phase status
